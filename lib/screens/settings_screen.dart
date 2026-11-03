@@ -7,7 +7,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
 import '../core/analysis.dart';
+import '../core/dates.dart';
 import '../core/units.dart';
+import '../data/csv_files.dart';
 import '../data/run_store.dart';
 import '../ui/spur_logo.dart';
 import '../ui/store_scope.dart';
@@ -26,6 +28,26 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
       children: [
+        const SectionTitle('Profile'),
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leading: CircleAvatar(
+              backgroundColor: scheme.primaryContainer,
+              foregroundColor: scheme.onPrimaryContainer,
+              child: store.name.isEmpty
+                  ? const Icon(Icons.person_outline)
+                  : Text(store.name.characters.first.toUpperCase(),
+                      style: displayStyle(20, scheme.onPrimaryContainer)),
+            ),
+            title: Text(store.name.isEmpty ? 'Add your name' : store.name,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(store.heightCm == null ? 'Height not set' : fmtHeight(store.heightCm!, store.units)),
+            trailing: const Icon(Icons.edit_outlined),
+            onTap: () => showDialog<void>(context: context, builder: (_) => _ProfileDialog(store: store)),
+          ),
+        ),
         const SectionTitle('Display'),
         Card(
           child: Padding(
@@ -120,24 +142,21 @@ class SettingsScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
                 child: Text(
                   'Runs are stored only on this phone. Nothing is uploaded or tracked. '
-                  'Copy a CSV now and then as a backup.',
+                  'Export a CSV file now and then as a backup. It opens in any spreadsheet and in the spur web app.',
                   style: muted,
                 ),
               ),
               ListTile(
-                leading: const Icon(Icons.copy_outlined),
-                title: const Text('Copy runs as CSV'),
-                onTap: () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  await Clipboard.setData(ClipboardData(text: store.exportCsv()));
-                  messenger.showSnackBar(SnackBar(content: Text('Copied ${store.runs.length} runs as CSV')));
-                },
+                leading: const Icon(Icons.file_download_outlined),
+                title: const Text('Export runs to a CSV file'),
+                subtitle: Text('${store.runs.length} ${store.runs.length == 1 ? 'run' : 'runs'} · choose where to save it'),
+                onTap: () => _export(context, store),
               ),
               ListTile(
-                leading: const Icon(Icons.content_paste_outlined),
-                title: const Text('Import runs from CSV'),
-                subtitle: const Text('date, distance in km, time'),
-                onTap: () => showDialog<void>(context: context, builder: (_) => _ImportDialog(store: store)),
+                leading: const Icon(Icons.file_upload_outlined),
+                title: const Text('Import runs from a CSV file'),
+                subtitle: const Text('Columns: date, distance in km, time'),
+                onTap: () => _import(context, store),
               ),
               if (store.hasSamples)
                 ListTile(
@@ -229,6 +248,36 @@ class SettingsScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  static Future<void> _export(BuildContext context, RunStore store) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final saved = await CsvFiles.save('spur-runs-${isoDate(todayDay())}.csv', store.exportCsv());
+      if (saved) messenger.showSnackBar(SnackBar(content: Text('Exported ${store.runs.length} runs')));
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message ?? 'Could not save the file.')));
+    }
+  }
+
+  static Future<void> _import(BuildContext context, RunStore store) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final text = await CsvFiles.open();
+      if (text == null) return;
+      final r = store.importCsv(text);
+      final parts = [
+        '${r.added} ${r.added == 1 ? 'run' : 'runs'} imported',
+        if (r.skipped > 0) '${r.skipped} ${r.skipped == 1 ? 'line' : 'lines'} skipped',
+      ];
+      messenger.showSnackBar(SnackBar(
+        content: Text(r.added == 0 && r.skipped > 0
+            ? 'No runs found. Use one run per line: date, km, time (2026-10-28,8.2,42:31).'
+            : parts.join(', ')),
+      ));
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message ?? 'Could not read the file.')));
+    }
   }
 
   static Future<void> _open(BuildContext context, String url) async {
@@ -325,72 +374,107 @@ class _Swatch extends StatelessWidget {
   }
 }
 
-class _ImportDialog extends StatefulWidget {
-  const _ImportDialog({required this.store});
+class _ProfileDialog extends StatefulWidget {
+  const _ProfileDialog({required this.store});
 
   final RunStore store;
 
   @override
-  State<_ImportDialog> createState() => _ImportDialogState();
+  State<_ProfileDialog> createState() => _ProfileDialogState();
 }
 
-class _ImportDialogState extends State<_ImportDialog> {
-  final _text = TextEditingController();
-  String? _message;
+class _ProfileDialogState extends State<_ProfileDialog> {
+  final _name = TextEditingController();
+  final _cm = TextEditingController();
+  final _ft = TextEditingController();
+  final _in = TextEditingController();
+  String? _error;
+
+  bool get _imperial => widget.store.units.isMiles;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.text = widget.store.name;
+    final h = widget.store.heightCm;
+    if (h != null) {
+      final inches = (h / 2.54).round();
+      _cm.text = '${h.round()}';
+      _ft.text = '${inches ~/ 12}';
+      _in.text = '${inches % 12}';
+    }
+  }
 
   @override
   void dispose() {
-    _text.dispose();
+    for (final c in [_name, _cm, _ft, _in]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _import() {
-    if (_text.text.trim().isEmpty) {
-      setState(() => _message = 'Paste some lines first.');
+  void _save() {
+    double? cm;
+    if (_imperial) {
+      final ft = int.tryParse(_ft.text.trim()), inch = int.tryParse(_in.text.trim());
+      if (ft != null || inch != null) cm = ((ft ?? 0) * 12 + (inch ?? 0)) * 2.54;
+    } else if (_cm.text.trim().isNotEmpty) {
+      cm = double.tryParse(_cm.text.trim().replaceAll(',', '.'));
+    }
+    if (cm != null && (cm < 100 || cm > 250)) {
+      setState(() => _error = _imperial ? 'Enter a height between 3 ft 4 in and 8 ft 2 in.' : 'Enter a height between 100 and 250 cm.');
       return;
     }
-    final r = widget.store.importCsv(_text.text);
-    if (r.added > 0 && r.skipped == 0) {
-      final messenger = ScaffoldMessenger.of(context);
-      Navigator.pop(context);
-      messenger.showSnackBar(
-        SnackBar(content: Text('Imported ${r.added} ${r.added == 1 ? 'run' : 'runs'}')),
-      );
-      return;
-    }
-    setState(() => _message = '${r.added} imported, ${r.skipped} '
-        '${r.skipped == 1 ? 'line' : 'lines'} skipped. Use date,km,h:mm:ss, for example 2026-10-28,8.2,42:31.');
+    widget.store.setProfile(name: _name.text, heightCm: cm);
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
+    InputDecoration deco(String label, [String? suffix]) =>
+        InputDecoration(labelText: label, suffixText: suffix, border: const OutlineInputBorder());
+    final digits = [FilteringTextInputFormatter.digitsOnly];
     return AlertDialog(
-      title: const Text('Import runs'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Paste one run per line: date, distance in km, time. Runs you already have are skipped.'),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _text,
-            minLines: 4,
-            maxLines: 8,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: '2026-10-28,8.2,42:31\n2026-10-30,5.0,26:05',
+      title: const Text('Profile'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Your name goes on the race bib on the overview. Both stay on this phone.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _name,
+              autofocus: widget.store.name.isEmpty,
+              textCapitalization: TextCapitalization.words,
+              maxLength: 40,
+              decoration: deco('Name'),
             ),
-          ),
-          if (_message != null) ...[
-            const SizedBox(height: 10),
-            Text(_message!, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            if (_imperial)
+              Row(children: [
+                Expanded(child: TextField(controller: _ft, keyboardType: TextInputType.number, inputFormatters: digits, decoration: deco('Height', 'ft'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: _in, keyboardType: TextInputType.number, inputFormatters: digits, decoration: deco('', 'in'))),
+              ])
+            else
+              TextField(
+                controller: _cm,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                decoration: deco('Height', 'cm'),
+                onSubmitted: (_) => _save(),
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        FilledButton(onPressed: _import, child: const Text('Import')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _save, child: const Text('Save')),
       ],
     );
   }

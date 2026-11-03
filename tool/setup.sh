@@ -10,7 +10,7 @@
 # Choose it carefully: once the app is on F-Droid the ID can never change.
 set -euo pipefail
 
-ORG="${1:?Usage: tool/setup.sh <org>, for example tool/setup.sh io.github.yourname}"
+ORG="${1:-io.github.dabaneghassan}"   # the app ID becomes <org>.spur; it must match MainActivity.kt
 cd "$(dirname "$0")/.."
 
 command -v flutter >/dev/null || { echo "Flutter is not installed: https://docs.flutter.dev/get-started/install"; exit 1; }

@@ -72,3 +72,10 @@ double? parseDecimal(String input) {
   if (s.isEmpty) return null;
   return double.tryParse(s);
 }
+
+/// Height for display: centimetres, or feet and inches when the runner uses miles.
+String fmtHeight(double cm, Units units) {
+  if (!units.isMiles) return '${cm.round()} cm';
+  final inches = (cm / 2.54).round();
+  return '${inches ~/ 12} ft ${inches % 12} in';
+}

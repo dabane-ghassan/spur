@@ -50,6 +50,8 @@ class RunStore extends ChangeNotifier {
   double? _goalSecPerKm;
   Smoothing _smoothing = Smoothing.medium;
   VolumeMetric _volume = VolumeMetric.distance;
+  String _name = '';
+  double? _heightCm;
 
   static Future<RunStore> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -71,6 +73,10 @@ class RunStore extends ChangeNotifier {
   double? get goalSecPerKm => _goalSecPerKm;
   Smoothing get smoothing => _smoothing;
   VolumeMetric get volume => _volume;
+
+  /// Profile: the runner's first name (shown on the race bib) and height.
+  String get name => _name;
+  double? get heightCm => _heightCm;
 
   Analysis analysis() => Analysis(_runs, today: todayDay(), smoothing: _smoothing);
 
@@ -121,6 +127,17 @@ class RunStore extends ChangeNotifier {
   set goalSecPerKm(double? v) => _set(() => _goalSecPerKm = v);
   set smoothing(Smoothing v) => _set(() => _smoothing = v);
   set volume(VolumeMetric v) => _set(() => _volume = v);
+
+  void setProfile({required String name, double? heightCm}) => _set(() {
+        _name = cleanName(name);
+        _heightCm = heightCm != null && heightCm >= 100 && heightCm <= 250 ? heightCm : null;
+      });
+
+  /// Trims a name to something that fits on a race bib.
+  static String cleanName(String raw) {
+    final s = raw.replaceAll(RegExp(r'[\u0000-\u001f\u007f]'), '').trim().replaceAll(RegExp(r'\s+'), ' ');
+    return s.length > 40 ? s.substring(0, 40).trimRight() : s;
+  }
 
   void _set(void Function() apply) {
     apply();
@@ -189,6 +206,10 @@ class RunStore extends ChangeNotifier {
       _goalSecPerKm = (s['goal'] as num?)?.toDouble();
       _smoothing = Smoothing.values.firstWhere((v) => v.name == s['smoothing'], orElse: () => Smoothing.medium);
       _volume = s['volume'] == 'time' ? VolumeMetric.time : VolumeMetric.distance;
+      final profile = (j['profile'] as Map?) ?? const {};
+      _name = profile['name'] is String ? cleanName(profile['name'] as String) : '';
+      final h = (profile['heightCm'] as num?)?.toDouble();
+      _heightCm = h != null && h >= 100 && h <= 250 ? h : null;
     } catch (_) {
       // A corrupt store should never crash the app; start fresh instead.
       _runs = [];
@@ -200,6 +221,10 @@ class RunStore extends ChangeNotifier {
         jsonEncode({
           'version': 1,
           'runs': _runs.map((r) => r.toJson()).toList(),
+          'profile': {
+            if (_name.isNotEmpty) 'name': _name,
+            if (_heightCm != null) 'heightCm': _heightCm,
+          },
           'settings': {
             'unit': _unit.name,
             'metric': _metric.name,

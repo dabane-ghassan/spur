@@ -43,6 +43,7 @@ class OverviewScreen extends StatelessWidget {
           value: a.trendNow == null ? '–' : metric(a.trendNow!),
           unit: isPace ? u.paceName : u.speedName,
           date: fmtLongDate(a.today),
+          name: store.name,
           status: _trendPill(a, u),
         ),
         const SectionTitle('Trends'),
