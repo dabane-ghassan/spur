@@ -1,0 +1,41 @@
+# DRAFT build recipe for F-Droid (https://gitlab.com/fdroid/fdroiddata).
+# 1. Rename this file to your real app ID, e.g. io.github.ghassan.spur.yml
+# 2. Replace YOURNAME and the URLs, and set the exact Flutter version you build with.
+# 3. Open a merge request to fdroiddata (metadata/<appid>.yml). The F-Droid
+#    packagers will review it and may adjust the build steps.
+Categories:
+  - Sports & Health
+License: GPL-3.0-or-later
+AuthorName: Ghassan Dabane
+SourceCode: https://codeberg.org/YOURNAME/spur
+IssueTracker: https://codeberg.org/YOURNAME/spur/issues
+Donate: https://buymeacoffee.com/YOURNAME
+
+AutoName: spur
+
+RepoType: git
+Repo: https://codeberg.org/YOURNAME/spur.git
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@3.32.0   # replace with the exact Flutter release you test with
+    prebuild:
+      - sed -i -e '/signingConfig =/d' android/app/build.gradle.kts
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
+    scandelete:
+      - .pub-cache
+    build:
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - $$flutter$$/bin/flutter build apk --release
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
+CurrentVersion: 1.0.0
+CurrentVersionCode: 1

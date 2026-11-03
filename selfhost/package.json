@@ -1,0 +1,17 @@
+{
+  "name": "spur-selfhost",
+  "version": "1.0.0",
+  "description": "spur – a private running diary you host yourself",
+  "license": "GPL-3.0-or-later",
+  "author": "Ghassan Dabane",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.js",
+    "reset-password": "node --disable-warning=ExperimentalWarning src/cli.js reset-password"
+  }
+}

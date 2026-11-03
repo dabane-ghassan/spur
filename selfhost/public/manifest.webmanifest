@@ -1,0 +1,17 @@
+{
+  "name": "spur – running diary",
+  "short_name": "spur",
+  "description": "A private running diary: log distance and time, see your pace trend.",
+  "start_url": "/#overview",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F2F1",
+  "theme_color": "#C4492F",
+  "categories": ["health", "fitness", "sports"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
