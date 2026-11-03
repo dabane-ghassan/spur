@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Optional: automatic HTTPS with Caddy and a free Let's Encrypt certificate.
+#   1. Point a domain (e.g. run.example.org) at this server; open ports 80 and 443.
+#   2. Set SPUR_DOMAIN in .env.
+#   3. docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+
+services:
+  spur:
+    ports: !reset []
+    environment:
+      SPUR_TRUST_PROXY: "true"
+      SPUR_COOKIE_SECURE: "true"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: spur-caddy
+    restart: unless-stopped
+    depends_on:
+      - spur
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    command: caddy reverse-proxy --from ${SPUR_DOMAIN:?Set SPUR_DOMAIN in .env} --to spur:4219
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

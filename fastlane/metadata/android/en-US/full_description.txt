@@ -1,0 +1,19 @@
+spur is a private running diary. Log each run with its distance and time, pace or speed, and spur shows whether you are really getting faster.
+
+<b>What it does</b>
+<ul>
+<li><b>Pace trend:</b> every run is a dot on the chart, and a smoothed line shows your real form, from the last month to all time.</li>
+<li><b>Volume trend:</b> your weekly distance or running time, with its own trend line.</li>
+<li><b>Adjustable smoothing:</b> off, soft, medium or strong.</li>
+<li><b>Pace goal:</b> set a target pace and spur estimates when your trend will reach it.</li>
+<li><b>Weekly distance:</b> with a gentle warning when a week jumps more than 10% above your recent average, a common cause of running injuries.</li>
+<li><b>Race predictions:</b> 5K, 10K, half and full marathon estimates from your best recent effort.</li>
+<li><b>Milestones:</b> your first 10K, 100 km in total, 12-week streaks and more.</li>
+<li>Kilometres or miles, pace or speed, light and dark mode, four themes.</li>
+<li>Export and import your runs as CSV.</li>
+</ul>
+
+<b>Private by design</b>
+spur requests no permissions and has no internet access. No account, no ads, no analytics. Your runs stay on your phone.
+
+spur is free software under the GNU GPL v3 or later.

@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Builds the spur Android APK on GitHub's servers.
+# Every push to main publishes a test build on the "latest-build" release;
+# a tag like v1.0.0 publishes a proper release.
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Permanent app ID once spur is published. Change it before the first release if you want another.
+  APP_ORG: io.github.dabaneghassan
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build, test and package
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "== flutter --version"; flutter --version
+            echo "== flutter create (fills in missing Android build files only)"
+            flutter create --org "$APP_ORG" --project-name spur --platforms android .
+            echo "== flutter pub get"; flutter pub get
+            echo "== flutter analyze"; flutter analyze --no-fatal-infos
+            echo "== flutter test"; flutter test
+            echo "== flutter build apk"; flutter build apk --release
+          } 2>&1 | tee build-log.txt
+          cp build/app/outputs/flutter-apk/app-release.apk spur.apk
+
+      # On failure, keep the full log on a "ci-log" branch so it can be read with plain git.
+      - name: Save the build log
+        if: failure()
+        shell: bash
+        run: |
+          [ -f build-log.txt ] || echo "No log was written; see the Actions page." > build-log.txt
+          mkdir -p /tmp/ci-log && cp build-log.txt /tmp/ci-log/
+          cd /tmp/ci-log
+          git init -q -b ci-log
+          git config user.name "spur CI"
+          git config user.email "ci@users.noreply.github.com"
+          git add build-log.txt
+          git commit -qm "Build log for ${GITHUB_SHA::7} (failed)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-log
+
+      - name: Publish test build
+        if: success() && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest test build
+          prerelease: true
+          make_latest: false
+          files: spur.apk
+          body: |
+            Test build of `${{ github.sha }}`, made automatically from the main branch.
+            Signed with a test key: uninstall it before installing a build signed differently (for example, from F-Droid).
+
+      - name: Publish release
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: spur.apk
+          generate_release_notes: true
