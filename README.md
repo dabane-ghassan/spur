@@ -1,78 +1,76 @@
-# spur
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/featureGraphic.png" alt="spur – a private running diary" width="720">
+</p>
 
-**A private running diary.** Log each run with its distance and time, pace or speed. spur smooths out the day-to-day noise and shows whether you are actually getting faster.
+<p align="center">
+  <a href="LICENSE"><img alt="License: GPL v3 or later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-c4492f"></a>
+  <a href="https://github.com/dabane-ghassan/spur/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/dabane-ghassan/spur?sort=semver&color=c4492f&label=release"></a>
+  <a href="https://github.com/dabane-ghassan/spur/actions/workflows/android.yml"><img alt="Android build" src="https://github.com/dabane-ghassan/spur/actions/workflows/android.yml/badge.svg"></a>
+  <a href="https://buymeacoffee.com/ghassandabane"><img alt="Buy me a coffee" src="https://img.shields.io/badge/buy_me_a-coffee-ffdd00?logo=buymeacoffee&logoColor=black"></a>
+</p>
+
+# A simple running diary that respects your privacy.
+
+Log the distance and time after each run. spur smooths out the good days and the bad days and shows whether you are really getting faster.
 
 *spur* is German for *track*: a diary of the tracks you leave.
 
-- **Pace trend** – every run is a dot; a smoothed line shows your real form over 1 month to all time.
-- **Volume trend** – weekly distance or running time, with its own smoothed trend and change on 4 weeks ago.
-- **Adjustable smoothing** – off, soft, medium or strong, for both trends.
-- **Pace goal** – set a target pace and spur estimates when your trend will reach it.
-- **Weekly distance** – with a gentle warning when a week jumps more than 10 % above your recent average, a common cause of running injuries.
-- **Race predictions** – 5K, 10K, half and full marathon estimates from your best recent effort (Riegel's formula).
-- **Milestones** – first 10K, 100 km total, 12-week streaks and more.
-- **Kilometres or miles**, pace or speed, light and dark mode, four themes.
-- **CSV export and import** through the clipboard.
+## Installation
 
-## Privacy
+<p>
+  <a href="https://github.com/dabane-ghassan/spur/releases/latest"><img alt="Download the APK" src="https://img.shields.io/badge/Download-APK-c4492f?style=for-the-badge&logo=android&logoColor=white"></a>
+  <img alt="F-Droid: coming soon" src="https://img.shields.io/badge/F--Droid-coming_soon-lightgrey?style=for-the-badge&logo=fdroid&logoColor=white">
+  <a href="selfhost/README.md"><img alt="Self-host with Docker" src="https://img.shields.io/badge/Self--host-Docker-2c77b8?style=for-the-badge&logo=docker&logoColor=white"></a>
+</p>
 
-spur requests **no permissions** and has **no internet access**. No account, no ads, no analytics, no trackers. Your runs are stored only on your phone.
+Android 7.0 or newer. Prefer the browser? Run the [self-hosted web app](selfhost/README.md) on your own server. More on the [website](https://dabane-ghassan.github.io/spur/).
+
+## Why spur?
+
+- **Truly free**: no ads, no account, no trackers
+- **Pace and volume trends** with smoothing you choose: off, soft, medium or strong
+- **Pace goal** with a forecast date, and a warning when your weekly distance jumps too fast
+- **Race predictions** from 5K to the marathon, and milestones along the way
+- **Your data, your files**: export and import plain CSV files, shared with the web app
+- **Privacy**: no permissions, no internet access; your runs never leave your phone
+- **Copylefted libre software** under the GNU GPL v3 or later
+
+## Screenshots
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="19%" alt="Overview with the trend pace on a race bib">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="19%" alt="Pace and volume trend charts">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="19%" alt="Logging a run by pace">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="19%" alt="Stats and race predictions">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="19%" alt="All runs, month by month">
+</p>
+
+## Self-hosting
+
+```sh
+git clone https://github.com/dabane-ghassan/spur
+cd spur/selfhost
+docker compose up -d        # then open http://your-server:4219
+```
+
+Accounts, HTTPS with Caddy, backups and the full API are described in [selfhost/README.md](selfhost/README.md).
 
 ## Building
 
-You need [Flutter](https://docs.flutter.dev/get-started/install) (3.32 or newer) and the Android SDK.
+The APK is built by [GitHub Actions](.github/workflows/android.yml) on every push. To build it yourself, or to sign and release it, see [BUILDING.md](BUILDING.md).
 
-```sh
-tool/setup.sh io.github.yourname   # one time: generates Gradle files, tests, builds the APK
-```
+## FAQ
 
-After that, the usual commands work:
+**Will spur stay free?** Yes, with every feature, always.
 
-```sh
-flutter run                 # run on a connected phone or emulator
-flutter test                # unit and widget tests
-flutter build apk --release
-```
+**Does it track my runs with GPS?** No, on purpose. You type in the distance and time from your watch or a map, so there is no location data to leak.
 
-Commit the generated `android/` files after the first setup, so F-Droid can build from the repository.
-
-### Before the first release
-
-1. In `lib/config.dart`, fill in `kDonateUrl` (your Buy Me a Coffee page) and `kSourceUrl`. Empty values hide those buttons.
-2. Pick the app ID for good when you run `tool/setup.sh` (for example `io.github.yourname`, giving `io.github.yourname.spur`). It cannot change once published.
-3. Tag the release in git as `v1.0.0`, matching `version: 1.0.0+1` in `pubspec.yaml`.
-
-### Signing your own builds
-
-F-Droid builds and signs the app itself, so you don't need a key for F-Droid. For APKs you publish yourself (or for Accrescent), create a release key once and keep it safe and private:
-
-```sh
-keytool -genkey -v -keystore ~/spur-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias spur
-```
-
-Then follow Flutter's guide to reference it from `android/key.properties`: <https://docs.flutter.dev/deployment/android#sign-the-app>. `key.properties` and keystores are git-ignored.
-
-## Self-hosted web app
-
-Prefer the browser, or want your runs on your own server? `selfhost/` holds the full spur web app, ready for Docker Compose, with accounts, HTTPS via Caddy, and install-to-home-screen on phones. See [selfhost/README.md](selfhost/README.md).
-
-## Product page
-
-`site/` is a static product page (no build step, no external requests). Publish it with Codeberg Pages or GitHub Pages, and fill in the coffee and source links at the bottom of `site/index.html`.
-
-## Distribution
-
-- **F-Droid** – see `fdroid/` for a draft build recipe to submit to the `fdroiddata` repository. Store texts and graphics live in `fastlane/metadata/android/`, where F-Droid picks them up automatically.
-- **Accrescent** – currently accepts new apps by invitation only.
+**Could you add feature X?** Open an [issue](https://github.com/dabane-ghassan/spur/issues) or a pull request.
 
 ## Support
 
-spur is free and always will be. If it helps your running, you can buy me a coffee (link in the app's Settings).
+If spur helps your running, you can [buy me a coffee](https://buymeacoffee.com/ghassandabane) ☕
 
-## Licence
+## License
 
-Copyright © 2026 Ghassan Dabane
-
-spur is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. See [LICENSE](LICENSE).
-
-The Barlow and Barlow Condensed fonts are © 2017 The Barlow Project Authors, licensed under the SIL Open Font License 1.1 (`assets/fonts/OFL.txt`).
+spur is licensed under the [GNU GPL v3 or later](LICENSE). The Barlow fonts are under the SIL Open Font License 1.1.

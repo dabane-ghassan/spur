@@ -1,5 +1,8 @@
 First release of spur 🏃
 • Log runs with distance plus time, pace or speed
-• Smoothed pace trend, pace goal forecast, weekly distance with load warning
+• Pace and volume trends, with smoothing off, soft, medium or strong
+• Pace goal forecast and a warning when weekly distance jumps
 • Race predictions and milestones
-• km or miles, four themes, dark mode, CSV import and export
+• Profile with your name on the race bib
+• Export and import your runs as CSV files
+• km or miles, four themes, dark mode

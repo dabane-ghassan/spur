@@ -1,6 +1,6 @@
 # DRAFT build recipe for F-Droid (https://gitlab.com/fdroid/fdroiddata).
 # Before submitting: tag a release (v1.0.0), set the exact Flutter version you
-# build with, add your Donate link, then open a merge request to fdroiddata as
+# build with, then open a merge request to fdroiddata as
 # metadata/io.github.dabaneghassan.spur.yml. The packagers may adjust the steps.
 Categories:
   - Sports & Health
@@ -8,6 +8,7 @@ License: GPL-3.0-or-later
 AuthorName: Ghassan Dabane
 SourceCode: https://github.com/dabane-ghassan/spur
 IssueTracker: https://github.com/dabane-ghassan/spur/issues
+Donate: https://buymeacoffee.com/ghassandabane
 
 AutoName: spur
 
