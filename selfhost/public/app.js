@@ -119,7 +119,7 @@ function linSlope(xs, ys) {
 function analysis() {
   const pts = points();
   if (!pts.length) return { pts };
-  const last = pts[pts.length - 1].t, tNow = Math.min(today(), last);
+  const last = pts[pts.length - 1].t, tNow = today(); // after a long break there is no trend until you run again
   const now = smoothAt(tNow, pts), then = smoothAt(tNow - 30, pts);
   // Six-week slope, for the goal forecast: of the trend, or of the runs themselves when smoothing is off.
   let slope = null;
