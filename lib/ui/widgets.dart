@@ -54,9 +54,13 @@ class BibCard extends StatelessWidget {
     required this.unit,
     required this.date,
     required this.status,
+    this.name = '',
   });
 
   final String label, value, unit, date;
+
+  /// The runner's name, printed on the bib like at a race. Falls back to "spur".
+  final String name;
   final Widget status;
 
   @override
@@ -88,7 +92,15 @@ class BibCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 34, vertical: 7),
                 child: Row(
                   children: [
-                    Text('SPUR', style: displayStyle(14, scheme.onPrimary, weight: FontWeight.w700).copyWith(letterSpacing: 2)),
+                    Flexible(
+                      child: Text(
+                        (name.isEmpty ? 'spur' : name).toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: displayStyle(14, scheme.onPrimary, weight: FontWeight.w700).copyWith(letterSpacing: 2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     const Spacer(),
                     Text(date.toUpperCase(),
                         style: displayStyle(14, scheme.onPrimary, weight: FontWeight.w700).copyWith(letterSpacing: 1.5)),

@@ -152,6 +152,15 @@ void main() {
     });
   });
 
+  test('profile names are tidied and heights checked', () async {
+    SharedPreferences.setMockInitialValues({});
+    final a = await RunStore.load();
+    a.setProfile(name: 'A ${'very ' * 20}long name', heightCm: 40);
+    expect(a.name.length, lessThanOrEqualTo(40));
+    expect(a.heightCm, isNull, reason: 'a height of 40 cm is refused');
+    expect(fmtHeight(178, const Units(DistanceUnit.mi)), '5 ft 10 in');
+  });
+
   group('store', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -175,6 +184,7 @@ void main() {
       a.unit = DistanceUnit.mi;
       a.goalSecPerKm = 300;
       a.smoothing = Smoothing.strong;
+      a.setProfile(name: '  Ghassan \n', heightCm: 178);
       a.volume = VolumeMetric.time;
       a.addRun(day: dayFromYmd(2026, 10, 28), km: 8.2, seconds: 2551);
       await Future<void>.delayed(Duration.zero);
@@ -182,6 +192,8 @@ void main() {
       expect(b.unit, DistanceUnit.mi);
       expect(b.goalSecPerKm, 300);
       expect(b.smoothing, Smoothing.strong);
+      expect(b.name, 'Ghassan');
+      expect(b.heightCm, 178);
       expect(b.volume, VolumeMetric.time);
       expect(b.runs, hasLength(1));
     });
