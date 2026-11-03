@@ -105,12 +105,28 @@ jobs:
             ${{ env.HAS_KEY == 'true' && 'Signed with the spur release key, so it installs over earlier test builds.' || 'Signed with a throwaway test key: uninstall the previous build before installing this one.' }}
             F-Droid signs its own builds, so switching to F-Droid later needs one uninstall.
 
-      - name: Write release notes
-        if: success() && startsWith(github.ref, 'refs/tags/v')
+      # A release is made for a pushed tag, or on main when pubspec.yaml has a
+      # version that has no release yet (bump the version, push, done).
+      - name: Is this a release?
+        id: rel
+        if: success()
         shell: bash
         run: |
+          ver=$(sed -nE 's/^version: *([^+ ]+)\+.*/\1/p' pubspec.yaml)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_REF" == refs/heads/main ]] && ! git ls-remote --exit-code --tags origin "refs/tags/v$ver" >/dev/null; then
+            echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write release notes
+        if: success() && steps.rel.outputs.tag != ''
+        shell: bash
+        env:
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
           code=$(sed -nE 's/^version: *[^+]+\+([0-9]+).*/\1/p' pubspec.yaml)
-          cp spur.apk "spur-${GITHUB_REF_NAME}.apk"
+          cp spur.apk "spur-${TAG}.apk"
           {
             echo "## What's new"
             echo
@@ -118,18 +134,26 @@ jobs:
             echo
             echo "## Install"
             echo
-            echo "Download **spur-${GITHUB_REF_NAME}.apk** below on your Android phone (Android 7.0 or newer), open it and allow your browser to install it."
+            echo "Download **spur-${TAG}.apk** below on your Android phone (Android 7.0 or newer), open it and allow your browser to install it."
             echo "spur asks for no permissions and has no internet access."
             echo
-            echo "Self-hosting the web app instead? See [selfhost/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/selfhost/README.md)."
+            echo "Self-hosting the web app instead? See [selfhost/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/selfhost/README.md)."
           } > release-notes.md
           cat release-notes.md
 
       - name: Publish release
-        if: success() && startsWith(github.ref, 'refs/tags/v')
+        if: success() && steps.rel.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          name: spur ${{ github.ref_name }}
+          tag_name: ${{ steps.rel.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: spur ${{ steps.rel.outputs.tag }}
           body_path: release-notes.md
-          files: spur-${{ github.ref_name }}.apk
+          files: spur-${{ steps.rel.outputs.tag }}.apk
+          prerelease: false
           make_latest: true
+
+      - name: Remove an old failure log
+        if: success() && github.ref == 'refs/heads/main'
+        shell: bash
+        run: git push origin --delete ci-log 2>/dev/null || true
