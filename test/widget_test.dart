@@ -22,7 +22,7 @@ void main() {
 
     await tester.tap(find.text('Stats'));
     await tester.pumpAndSettle();
-    expect(find.text('Race predictions'.toUpperCase()), findsOneWidget);
+    expect(find.text('TOTALS'), findsOneWidget);
   });
 
   testWidgets('logging a run from the sheet', (tester) async {

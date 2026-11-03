@@ -68,9 +68,9 @@ class Analysis {
 
   int? get lastDay => runs.isEmpty ? null : runs.last.day;
 
-  /// The day the headline trend refers to: today, or the last run if that
-  /// is later (it never should be, but imported data can be odd).
-  int? get trendDay => lastDay == null ? null : math.min(today, lastDay!);
+  /// The day the headline trend refers to: today. After a long break there
+  /// is no trend until you run again.
+  int? get trendDay => lastDay == null ? null : today;
 
   double? get trendNow => trendDay == null ? null : smoothAt(trendDay!);
 
