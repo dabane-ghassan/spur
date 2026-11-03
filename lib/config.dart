@@ -5,7 +5,7 @@
 /// button in Settings.
 
 /// Your Buy Me a Coffee page, e.g. 'https://buymeacoffee.com/yourname'.
-const String kDonateUrl = '';
+const String kDonateUrl = 'https://buymeacoffee.com/ghassandabane';
 
 /// Public source repository, e.g. 'https://codeberg.org/yourname/spur'.
 const String kSourceUrl = 'https://github.com/dabane-ghassan/spur';

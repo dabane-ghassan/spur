@@ -6,7 +6,7 @@
 
 /* Fill these in to show the matching buttons in Settings. */
 const LINKS = {
-  donate: '', // e.g. 'https://buymeacoffee.com/yourname'
+  donate: 'https://buymeacoffee.com/ghassandabane',
   source: 'https://github.com/dabane-ghassan/spur',
 };
 

@@ -105,9 +105,31 @@ jobs:
             ${{ env.HAS_KEY == 'true' && 'Signed with the spur release key, so it installs over earlier test builds.' || 'Signed with a throwaway test key: uninstall the previous build before installing this one.' }}
             F-Droid signs its own builds, so switching to F-Droid later needs one uninstall.
 
+      - name: Write release notes
+        if: success() && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          code=$(sed -nE 's/^version: *[^+]+\+([0-9]+).*/\1/p' pubspec.yaml)
+          cp spur.apk "spur-${GITHUB_REF_NAME}.apk"
+          {
+            echo "## What's new"
+            echo
+            sed 's/^• /- /' "fastlane/metadata/android/en-US/changelogs/${code}.txt" 2>/dev/null || echo "See the commits since the last release."
+            echo
+            echo "## Install"
+            echo
+            echo "Download **spur-${GITHUB_REF_NAME}.apk** below on your Android phone (Android 7.0 or newer), open it and allow your browser to install it."
+            echo "spur asks for no permissions and has no internet access."
+            echo
+            echo "Self-hosting the web app instead? See [selfhost/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/selfhost/README.md)."
+          } > release-notes.md
+          cat release-notes.md
+
       - name: Publish release
         if: success() && startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: spur.apk
-          generate_release_notes: true
+          name: spur ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: spur-${{ github.ref_name }}.apk
+          make_latest: true
