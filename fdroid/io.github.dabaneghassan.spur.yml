@@ -1,20 +1,18 @@
 # DRAFT build recipe for F-Droid (https://gitlab.com/fdroid/fdroiddata).
-# 1. Rename this file to your real app ID, e.g. io.github.ghassan.spur.yml
-# 2. Replace YOURNAME and the URLs, and set the exact Flutter version you build with.
-# 3. Open a merge request to fdroiddata (metadata/<appid>.yml). The F-Droid
-#    packagers will review it and may adjust the build steps.
+# Before submitting: tag a release (v1.0.0), set the exact Flutter version you
+# build with, add your Donate link, then open a merge request to fdroiddata as
+# metadata/io.github.dabaneghassan.spur.yml. The packagers may adjust the steps.
 Categories:
   - Sports & Health
 License: GPL-3.0-or-later
 AuthorName: Ghassan Dabane
-SourceCode: https://codeberg.org/YOURNAME/spur
-IssueTracker: https://codeberg.org/YOURNAME/spur/issues
-Donate: https://buymeacoffee.com/YOURNAME
+SourceCode: https://github.com/dabane-ghassan/spur
+IssueTracker: https://github.com/dabane-ghassan/spur/issues
 
 AutoName: spur
 
 RepoType: git
-Repo: https://codeberg.org/YOURNAME/spur.git
+Repo: https://github.com/dabane-ghassan/spur.git
 
 Builds:
   - versionName: 1.0.0
@@ -24,6 +22,7 @@ Builds:
     srclibs:
       - flutter@3.32.0   # replace with the exact Flutter release you test with
     prebuild:
+      - $$flutter$$/bin/flutter create --org io.github.dabaneghassan --project-name spur --platforms android .
       - sed -i -e '/signingConfig =/d' android/app/build.gradle.kts
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics

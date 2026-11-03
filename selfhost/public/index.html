@@ -76,7 +76,7 @@
         </div>
 
         <div class="bib ov-bib">
-          <div class="strip"><span>spur</span><span id="bibDate" class="num"></span></div>
+          <div class="strip"><span id="bibName">spur</span><span id="bibDate" class="num"></span></div>
           <span class="pin tl"></span><span class="pin tr"></span><span class="pin bl"></span><span class="pin br"></span>
           <div class="body">
             <span class="label" id="bibLabel">Trend pace</span>
@@ -167,6 +167,23 @@
       <div class="settings-grid">
         <div class="settings-col">
           <div class="group">
+            <h2>Profile</h2>
+            <form class="card set" id="profileForm" novalidate>
+              <div class="field"><label for="pfName">Name</label><input class="input" id="pfName" maxlength="40" autocomplete="given-name" placeholder="Your first name, for the race bib"></div>
+              <div class="field">
+                <span class="lbl" id="pfHeightLbl">Height</span>
+                <div class="hms two" id="pfMetric">
+                  <div class="unitwrap"><input class="input num" id="pfCm" type="number" inputmode="decimal" min="100" max="250" step="0.5" placeholder="178" aria-labelledby="pfHeightLbl"><span>cm</span></div>
+                </div>
+                <div class="hms two" id="pfImperial" hidden>
+                  <div class="unitwrap"><input class="input num" id="pfFt" type="number" inputmode="numeric" min="3" max="8" placeholder="5" aria-label="Height, feet"><span>ft</span></div>
+                  <div class="unitwrap"><input class="input num" id="pfIn" type="number" inputmode="numeric" min="0" max="11" placeholder="10" aria-label="Height, inches"><span>in</span></div>
+                </div>
+              </div>
+              <div class="setrow"><p class="err" id="pfMsg"></p><button class="btn primary" type="submit">Save profile</button></div>
+            </form>
+          </div>
+          <div class="group">
             <h2>Display</h2>
             <div class="card set">
               <div class="setrow"><span>Distance unit</span><div class="seg" id="unitSeg" role="group" aria-label="Distance unit"><button type="button" data-v="km">Kilometres</button><button type="button" data-v="mi">Miles</button></div></div>
@@ -180,18 +197,9 @@
             <h2>Your data</h2>
             <div class="card set">
               <p class="muted small" style="margin:0">Your runs are stored on this spur server, which you or someone you trust runs. Nothing goes anywhere else. The CSV format is the same as the spur Android app's.</p>
-              <div class="setrow"><span>Export</span><a class="btn" id="exportCsv" href="/api/export.csv" download>Download CSV</a></div>
-              <div class="field">
-                <label for="importBox">Import (paste CSV: date, distance in km, time)</label>
-                <textarea class="input" id="importBox" placeholder="2026-10-28,8.2,42:31&#10;2026-10-30,5.0,26:05"></textarea>
-                <div class="setrow">
-                  <p class="err" id="importMsg"></p>
-                  <span class="row-actions">
-                    <span class="btn file-label">Choose file<input type="file" id="importFile" accept=".csv,text/csv,text/plain" aria-label="Import a CSV file"></span>
-                    <button class="btn primary" id="doImport" type="button">Import runs</button>
-                  </span>
-                </div>
-              </div>
+              <div class="setrow"><span>Export<span class="muted small set-note">All your runs as a CSV file</span></span><a class="btn" id="exportCsv" href="/api/export.csv" download>Export CSV file</a></div>
+              <div class="setrow"><span>Import<span class="muted small set-note">One run per line: date, distance in km, time. Runs you already have are skipped.</span></span><span class="btn primary file-label">Import CSV file<input type="file" id="importFile" accept=".csv,text/csv,text/plain" aria-label="Import a CSV file"></span></div>
+              <p class="err" id="importMsg" role="status"></p>
               <div class="setrow" id="samplesRow"><span id="samplesLabel">Sample runs</span><button class="btn" id="samplesBtn" type="button">Load samples</button></div>
               <div class="setrow" id="wipeRow"><span>Delete every run in your diary</span><button class="btn danger" id="wipe" type="button">Delete all</button></div>
               <div class="setrow" id="wipeConfirm" hidden><span class="small">This can't be undone. Delete all runs?</span><span class="row-actions"><button class="btn" id="wipeNo" type="button">Keep</button><button class="btn danger" id="wipeYes" type="button">Delete all</button></span></div>

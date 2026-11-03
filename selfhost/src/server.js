@@ -237,7 +237,8 @@ export function createServer(config, store = openDb(config.dbFile)) {
 
     if (route === 'PUT /api/settings') {
       const merged = { ...settingsOf(user), ...cleanSettings(await readJson(req)) };
-      if (merged.goal === null) delete merged.goal;
+      for (const k of ['goal', 'heightCm']) if (merged[k] === null) delete merged[k];
+      if (merged.name === '') delete merged.name;
       store.setSettings(uid, merged);
       return send(res, 200, { settings: merged });
     }

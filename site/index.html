@@ -9,7 +9,9 @@
 <meta name="description" content="spur is a free, private running diary. Log distance and time, and see whether you are really getting faster. No account, no ads, no tracking.">
 <meta property="og:title" content="spur – a private running diary">
 <meta property="og:description" content="Log your runs, see your real pace trend. Free, open source, no tracking.">
-<meta property="og:image" content="img/social.png">
+<meta property="og:image" content="https://dabane-ghassan.github.io/spur/img/social.png">
+<meta property="og:url" content="https://dabane-ghassan.github.io/spur/">
+<link rel="canonical" href="https://dabane-ghassan.github.io/spur/">
 <meta name="theme-color" content="#C4492F">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
@@ -131,8 +133,10 @@ section{padding-block:72px}
 .way{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:28px;display:grid;gap:16px;align-content:start;min-width:0}
 .way .tag{font-family:var(--f-display);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--accent)}
 .way p{color:var(--muted)}
+.row-btns{display:flex;flex-wrap:wrap;gap:10px}
 pre{margin:0;background:var(--code-bg);color:var(--code-ink);border-radius:14px;padding:18px 20px;overflow-x:auto;font-size:14.5px;line-height:1.7;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 pre .c{opacity:.55}
+.codebox pre{padding-top:46px}
 .codebox{position:relative;min-width:0}
 .copy-btn{position:absolute;top:10px;right:10px;border:0;border-radius:8px;padding:6px 10px;font:600 13px var(--f-body);background:rgba(255,255,255,.12);color:var(--code-ink);cursor:pointer}
 
@@ -181,7 +185,7 @@ footer .name{font-family:var(--f-display);font-weight:800;font-style:italic;font
     <nav class="top" aria-label="Main">
       <svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="#FFF5F1"/><ellipse cx="17" cy="31" rx="4.5" ry="7.5" transform="rotate(-18 17 31)" fill="#C4492F"/><ellipse cx="31" cy="17" rx="4.5" ry="7.5" transform="rotate(-18 31 17)" fill="#C4492F"/><circle cx="13" cy="21" r="1.6" fill="#C4492F" opacity=".6"/><circle cx="35" cy="27" r="1.6" fill="#C4492F" opacity=".6"/></svg>
       <a class="name" href="#">spur</a>
-      <div class="links"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#get">Get spur</a><a href="#faq">FAQ</a></div>
+      <div class="links"><a href="#features">Features</a><a href="#privacy">Privacy</a><a href="#get">Get spur</a><a href="#faq">FAQ</a><a href="https://github.com/dabane-ghassan/spur">GitHub</a></div>
     </nav>
     <div class="hero-grid">
       <div>
@@ -318,9 +322,10 @@ footer .name{font-family:var(--f-display);font-weight:800;font-style:italic;font
     <div class="ways">
       <div class="way">
         <span class="tag">Android</span>
-        <h3>The app, on F-Droid</h3>
+        <h3>The app, for Android</h3>
         <p>A native app with no permissions and no internet access. Everything stays on your phone.</p>
-        <div><span class="btn accent" aria-disabled="true">F-Droid <small>· coming soon</small></span></div>
+        <div class="row-btns"><a class="btn accent" href="https://github.com/dabane-ghassan/spur/releases/tag/latest-build">Download the APK</a><span class="btn outline" aria-disabled="true">F-Droid <small>· coming soon</small></span></div>
+        <p style="font-size:15px">For Android 7.0 and newer. Open the file on your phone and allow your browser to install it.</p>
       </div>
       <div class="way">
         <span class="tag">Self-hosted</span>
@@ -374,6 +379,7 @@ docker compose up -d
     <span class="name">spur</span>
     <span>Free software under the GNU GPL v3 or later · © 2026 Ghassan Dabane</span>
     <span>Fonts: Barlow, SIL Open Font License</span>
+    <a href="https://github.com/dabane-ghassan/spur">Source code on GitHub</a>
   </div>
 </footer>
 
@@ -381,7 +387,7 @@ docker compose up -d
 // Fill in to show the coffee button and the source-code link.
 var LINKS = {
   donate: '', // e.g. 'https://buymeacoffee.com/yourname'
-  source: ''  // e.g. 'https://codeberg.org/yourname/spur'
+  source: 'https://github.com/dabane-ghassan/spur'
 };
 (function () {
   if (LINKS.donate) {
@@ -393,7 +399,7 @@ var LINKS = {
     var s = document.getElementById('sourceLink');
     s.href = LINKS.source; document.getElementById('sourceWrap').hidden = false;
     var pre = document.getElementById('installCode');
-    pre.innerHTML = 'git clone ' + LINKS.source.replace(/[<>&"]/g, '') + '.git spur\ncd spur/selfhost\ndocker compose up -d\n<span class="c"># then open http://your-server:4219</span>';
+    pre.innerHTML = 'git clone ' + LINKS.source.replace(/[<>&"]/g, '') + '\ncd spur/selfhost\ndocker compose up -d\n<span class="c"># then open http://your-server:4219</span>';
   }
   var btn = document.getElementById('copyBtn');
   btn.addEventListener('click', function () {
