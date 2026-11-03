@@ -49,9 +49,10 @@ throwaway key. F-Droid signs its own builds and needs no key.
 
 1. Bump `version:` in `pubspec.yaml` (for example `1.0.1+2`) and `kAppVersion` in `lib/config.dart`.
 2. Add `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`.
-3. Commit, then tag and push: `git tag v1.0.1 && git push origin v1.0.1`.
+3. Commit and push to `main`.
 
-The workflow creates the release with the changelog and `spur-v1.0.1.apk` attached.
+When the build finds a version with no release yet, it tags the commit `v1.0.1` and publishes the
+release with the changelog and `spur-v1.0.1.apk` attached. Pushing a `v*` tag yourself works too.
 
 ## F-Droid
 
