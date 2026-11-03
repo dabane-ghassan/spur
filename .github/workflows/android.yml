@@ -28,6 +28,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # With these two repository secrets set, every build is signed with the same
+      # spur key, so new versions install over old ones. Without them, builds use
+      # a throwaway test key.
+      HAS_KEY: ${{ secrets.SPUR_KEYSTORE_BASE64 != '' && secrets.SPUR_KEYSTORE_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,6 +61,21 @@ jobs:
           } 2>&1 | tee build-log.txt
           cp build/app/outputs/flutter-apk/app-release.apk spur.apk
 
+      - name: Sign with the spur release key
+        if: env.HAS_KEY == 'true'
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.SPUR_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.SPUR_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/spur.jks"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/spur.jks" --ks-key-alias spur \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS \
+            --out spur.apk build/app/outputs/flutter-apk/app-release.apk
+          "$BT/apksigner" verify --print-certs spur.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
+          rm -f "$RUNNER_TEMP/spur.jks"
+
       # On failure, keep the full log on a "ci-log" branch so it can be read with plain git.
       - name: Save the build log
         if: failure()
@@ -82,7 +102,8 @@ jobs:
           files: spur.apk
           body: |
             Test build of `${{ github.sha }}`, made automatically from the main branch.
-            Signed with a test key: uninstall it before installing a build signed differently (for example, from F-Droid).
+            ${{ env.HAS_KEY == 'true' && 'Signed with the spur release key, so it installs over earlier test builds.' || 'Signed with a throwaway test key: uninstall the previous build before installing this one.' }}
+            F-Droid signs its own builds, so switching to F-Droid later needs one uninstall.
 
       - name: Publish release
         if: success() && startsWith(github.ref, 'refs/tags/v')
