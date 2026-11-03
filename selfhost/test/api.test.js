@@ -106,6 +106,18 @@ test('settings keep only allowed values', async () => {
   assert.equal(cleared.data.settings.goal, undefined);
 });
 
+test('profile: name is tidied, height checked, both can be cleared', async () => {
+  const r = await alice('PUT', '/api/settings', { name: '  Ghassan\n\u0007 ', heightCm: 178.25 });
+  assert.equal(r.data.settings.name, 'Ghassan');
+  assert.equal(r.data.settings.heightCm, 178.3);
+  const bad = await alice('PUT', '/api/settings', { heightCm: 20, name: 'x'.repeat(80) });
+  assert.equal(bad.data.settings.heightCm, 178.3, 'an impossible height is ignored');
+  assert.equal(bad.data.settings.name.length, 40);
+  const cleared = await alice('PUT', '/api/settings', { name: '', heightCm: null });
+  assert.equal(cleared.data.settings.name, undefined);
+  assert.equal(cleared.data.settings.heightCm, undefined);
+});
+
 test('samples load and clear', async () => {
   const r = await alice('POST', '/api/samples', { today: '2026-11-02' });
   assert.ok(r.data.runs.length > 50);

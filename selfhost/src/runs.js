@@ -105,6 +105,13 @@ export function cleanSettings(input) {
   const g = Number(input.goal);
   if (input.goal === null) out.goal = null;
   else if (g >= 150 && g <= 1200) out.goal = g;
+  // Profile: a first name for the race bib, and height in centimetres.
+  if (typeof input.name === 'string') {
+    out.name = input.name.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 40).trim();
+  }
+  const h = Number(input.heightCm);
+  if (input.heightCm === null) out.heightCm = null;
+  else if (h >= 100 && h <= 250) out.heightCm = Math.round(h * 10) / 10;
   return out;
 }
 

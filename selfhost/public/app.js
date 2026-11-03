@@ -7,7 +7,7 @@
 /* Fill these in to show the matching buttons in Settings. */
 const LINKS = {
   donate: '', // e.g. 'https://buymeacoffee.com/yourname'
-  source: '', // e.g. 'https://codeberg.org/yourname/spur'
+  source: 'https://github.com/dabane-ghassan/spur',
 };
 
 const MI = 1.609344, DAY = 864e5;
@@ -327,6 +327,7 @@ function renderOverview() {
   const a = analysis(), s = state.settings;
   $('#sampleBanner').hidden = !state.runs.some((r) => r.sample);
   $('#bibDate').textContent = fd(today(), { day: 'numeric', month: 'short', year: 'numeric' });
+  $('#bibName').textContent = s.name || 'spur';
   $('#bibLabel').textContent = (smoothingOn() ? 'Trend ' : 'Latest ') + (isPace() ? 'pace' : 'speed');
   const big = $('#bibBig'), chip = $('#bibChip');
   if (a.now == null) { big.textContent = '–'; chip.className = 'chip flat'; chip.textContent = 'No runs in the last few weeks'; }
@@ -502,8 +503,25 @@ function renderRuns() {
   }
   el.innerHTML = h;
 }
+function fmtHeight(cm) {
+  if (U() !== 'mi') return `${Math.round(cm)} cm`;
+  const inch = Math.round(cm / 2.54);
+  return `${Math.floor(inch / 12)} ft ${inch % 12} in`;
+}
+function renderProfile() {
+  const s = state.settings, imperial = U() === 'mi';
+  if (document.activeElement?.closest('#profileForm')) return; // don't overwrite what's being typed
+  $('#pfName').value = s.name || '';
+  $('#pfMetric').hidden = imperial; $('#pfImperial').hidden = !imperial;
+  const h = s.heightCm;
+  $('#pfCm').value = h ? Math.round(h) : '';
+  const inch = h ? Math.round(h / 2.54) : null;
+  $('#pfFt').value = inch != null ? Math.floor(inch / 12) : '';
+  $('#pfIn').value = inch != null ? inch % 12 : '';
+}
 function renderSettings() {
   const s = state.settings;
+  renderProfile();
   [['#unitSeg', s.unit], ['#metricSeg', s.metric], ['#modeSeg', s.mode], ['#smoothSetSeg', s.smoothing]].forEach(([sel, v]) => $$(sel + ' button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === v)));
   $('#swatches').innerHTML = PALETTES.map(([k, n, c]) => `<button class="sw" type="button" data-v="${k}" aria-pressed="${s.palette === k}"><i style="background:${c}"></i>${n}</button>`).join('');
   const hasSamples = state.runs.some((r) => r.sample);
@@ -607,6 +625,24 @@ $('#signOut').addEventListener('click', async () => {
   try { await api('POST', '/api/logout'); } catch {}
   state.user = null; state.runs = []; state.signupMode = false;
   showAuth();
+});
+$('#profileForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const msg = $('#pfMsg');
+  let cm = null;
+  if (U() === 'mi') {
+    const ft = $('#pfFt').value.trim(), inch = $('#pfIn').value.trim();
+    if (ft || inch) cm = ((Number(ft) || 0) * 12 + (Number(inch) || 0)) * 2.54;
+  } else if ($('#pfCm').value.trim()) cm = Number($('#pfCm').value.replace(',', '.'));
+  if (cm != null && !(cm >= 100 && cm <= 250)) {
+    msg.textContent = U() === 'mi' ? 'Enter a height between 3 ft 4 in and 8 ft 2 in.' : 'Enter a height between 100 and 250 cm.';
+    return;
+  }
+  msg.textContent = '';
+  const name = $('#pfName').value.replace(/\s+/g, ' ').trim().slice(0, 40);
+  document.activeElement?.blur();
+  saveSettings({ name, heightCm: cm == null ? null : Math.round(cm * 10) / 10 });
+  toast(cm == null ? 'Profile saved' : `Profile saved · ${fmtHeight(cm)}`);
 });
 $('#pwForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -753,25 +789,24 @@ $('#samplesBtn').addEventListener('click', () => (state.runs.some((r) => r.sampl
 
 async function importCsv(csv) {
   const msg = $('#importMsg');
-  if (!csv.trim()) return (msg.textContent = 'Paste some lines or choose a file first.');
+  if (!csv.trim()) return (msg.textContent = 'That file is empty.');
   try {
     const r = await api('POST', '/api/import', { csv });
     state.runs = (await api('GET', '/api/runs')).runs;
     const parts = [`${r.added} imported`];
     if (r.duplicates) parts.push(`${r.duplicates} already in your diary`);
-    if (r.skipped) parts.push(`${r.skipped} skipped (use date,km,h:mm:ss)`);
+    if (r.skipped) parts.push(`${r.skipped} ${r.skipped === 1 ? 'line' : 'lines'} skipped (use date,km,h:mm:ss)`);
     msg.textContent = parts.join(', ') + '.';
-    if (r.added) { $('#importBox').value = ''; toast('Import done'); }
+    if (r.added) toast(`Imported ${r.added} ${r.added === 1 ? 'run' : 'runs'}`);
     render();
   } catch (e) { msg.textContent = e.message; }
 }
-$('#doImport').addEventListener('click', () => importCsv($('#importBox').value));
 $('#importFile').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   if (file.size > 1.5 * 1024 * 1024) { $('#importMsg').textContent = 'That file is larger than 1.5 MB. Split it into smaller files.'; return; }
   const reader = new FileReader();
-  reader.onload = () => importCsv(String(reader.result));
+  reader.onload = () => importCsv(String(reader.result).replace(/^\uFEFF/, ''));
   reader.readAsText(file);
   e.target.value = '';
 });
