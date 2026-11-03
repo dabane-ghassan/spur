@@ -9,6 +9,8 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # The product page and the self-hosted web app don't affect the APK.
+    paths-ignore: ["site/**", "selfhost/**", ".github/workflows/pages.yml", "**.md"]
   workflow_dispatch:
 
 permissions:
