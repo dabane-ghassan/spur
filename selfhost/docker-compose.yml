@@ -17,7 +17,7 @@ services:
     ports:
       - "${SPUR_PORT:-4219}:4219"
     environment:
-      SPUR_ALLOW_SIGNUP: ${SPUR_ALLOW_SIGNUP:-false}
+      SPUR_ALLOW_SIGNUP: ${SPUR_ALLOW_SIGNUP:-true}
       SPUR_TRUST_PROXY: ${SPUR_TRUST_PROXY:-false}
       SPUR_COOKIE_SECURE: ${SPUR_COOKIE_SECURE:-auto}
       SPUR_SESSION_DAYS: ${SPUR_SESSION_DAYS:-90}
