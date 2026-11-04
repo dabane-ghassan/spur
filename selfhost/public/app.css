@@ -295,11 +295,13 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .ov-banner{grid-column:1/-1}
   .ov-bib{grid-column:span 6;align-self:stretch}
   .ov-kpis{grid-column:span 6;align-self:stretch;grid-auto-rows:1fr}
-  .ov-trends,.ov-nav,.ov-main{grid-column:1/-1}
+  .ov{grid-auto-flow:row dense}
+  .ov-trends,.ov-nav{grid-column:1/-1}
   .ov-chart,.ov-volume{grid-column:1/-1}
-  .ov-side{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
-  .ov-side .ov-goal{grid-column:1/-1}
-  .ov-main,.ov-side{gap:20px}
+  /* cards come in pairs that share a row, so neighbours always end level */
+  .ov-cal,.ov-recent,.ov-pred{grid-column:1/-1}
+  .ov-goal,.ov-records{grid-column:span 6}
+  .ov-cal,.ov-goal,.ov-recent,.ov-records,.ov-pred{align-self:stretch}
   .bib .big{font-size:clamp(84px,8vw,124px)}
   .kpi{padding:16px 18px}
   .kpi .v{font-size:36px}
@@ -327,8 +329,8 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .ov-kpis{grid-column:span 7}
   .ov-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
   .ov-chart,.ov-volume{grid-column:span 6;align-self:stretch}
-  .ov-main{grid-column:span 8}
-  .ov-side{grid-column:span 4;display:flex;flex-direction:column;align-items:stretch}
+  .ov-cal,.ov-recent{grid-column:span 8}
+  .ov-goal,.ov-records{grid-column:span 4}
 }
 @keyframes pop{from{transform:scale(.97);opacity:.4}to{transform:none;opacity:1}}
 
@@ -379,9 +381,16 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
 #navChart svg:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:8px}
 .hint{margin:0;font-size:12px;color:var(--muted);padding:0 2px}
 
-/* dashboard columns (phones; wider layouts are set in the 960px+ rules) */
-@media (max-width:959px){.ov-main,.ov-side{display:flex;flex-direction:column;gap:14px;min-width:0}}
-.ov-main,.ov-side{min-width:0}
+/* race predictions strip */
+.race-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.race{background:var(--surface-2);border-radius:14px;padding:14px 16px 16px;display:grid;gap:2px;min-width:0}
+.race-name{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.race-time{font-family:var(--f-display);font-weight:800;font-size:34px;line-height:1.05}
+.race-pace{font-size:13px;color:var(--muted)}
+.race-bar{display:block;height:4px;border-radius:2px;background:var(--line);margin-top:10px;overflow:hidden}
+.race-bar b{display:block;height:100%;width:var(--w);background:var(--accent);border-radius:2px}
+@media (max-width:640px){.race-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.race-time{font-size:28px}}
+.head .small{margin-left:4px}
 
 /* activity calendar */
 .cal svg{display:block;width:100%;height:auto}
