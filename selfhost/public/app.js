@@ -743,10 +743,30 @@ function runsTable(runs, { sortable, group }) {
   return `<div class="tbl-wrap"><table class="runs-table num"><thead><tr>${head}<th class="chev"><span class="visually-hidden">Edit</span></th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 function renderSideWeek() {
-  const cur = weekStart(today()), days = new Set(state.runs.map((r) => dn(r.date)));
-  const km = state.runs.filter((r) => dn(r.date) >= cur).reduce((a, r) => a + r.km, 0);
-  const marks = [0, 1, 2, 3, 4, 5, 6].map((i) => `<i class="${days.has(cur + i) ? 'on' : ''}${cur + i === today() ? ' today' : ''}" title="${esc(fd(cur + i, { weekday: 'long' }))}${days.has(cur + i) ? ': ran' : ''}"></i>`).join('');
-  $('#sideWeek').innerHTML = `<span class="k">This week</span><span class="v num">${toUnit(km).toFixed(1)}<small>${uName()}</small></span><span class="bar7">${marks}</span>`;
+  const cur = weekStart(today()), t = today(), perDay = new Map();
+  for (const r of state.runs) { const d = dn(r.date); if (d >= cur - 7) perDay.set(d, (perDay.get(d) || 0) + r.km); }
+  let km = 0, last = 0, ran = 0, top = 0;
+  for (let i = 0; i < 7; i++) {
+    const v = perDay.get(cur + i) || 0;
+    km += v; last += perDay.get(cur - 7 + i) || 0; if (v > 0) ran++; top = Math.max(top, v);
+  }
+  const bars = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+    const d = cur + i, v = perDay.get(d) || 0;
+    const cls = [v > 0 ? 'on' : '', d === t ? 'today' : '', d > t ? 'later' : ''].filter(Boolean).join(' ');
+    const tip = `${fd(d, { weekday: 'long' })}${v > 0 ? `: ${fmtDist(v)} ${uName()}` : ''}`;
+    const h = v > 0 && top > 0 ? Math.max(14, Math.round((v / top) * 100)) : 0;
+    return `<span class="${cls}" title="${esc(tip)}"><i style="height:${h}%"></i><em>${esc(fd(d, { weekday: 'narrow' }))}</em></span>`;
+  }).join('');
+  $('#sideWeek').innerHTML = `<div class="sw-head"><span class="k">This week</span><span class="sw-days">${ran} of 7 days</span></div>`
+    + `<span class="v num">${toUnit(km).toFixed(1)}<small>${uName()}</small></span><div class="sw-bars">${bars}</div>`
+    + `<span class="sw-cmp">Last week ${fmtDist(last)} ${uName()}</span>`;
+}
+function renderSideUser() {
+  const user = state.user?.username || '', name = (state.settings.name || '').trim();
+  $('#sideName').textContent = name || user;
+  $('#sideSub').textContent = name ? `@${user}` : 'Add your name in Settings';
+  $('#sideAvatar').textContent = (name || user).slice(0, 1) || '?';
+  $('#sideCount').textContent = state.runs.length ? state.runs.length.toLocaleString() : '';
 }
 function renderStats() {
   const runs = state.runs, wk = weekly(), tot = runs.reduce((a, r) => a + r.km, 0), longest = runs.reduce((m, r) => Math.max(m, r.km), 0);
@@ -848,8 +868,7 @@ function render() {
     settings: `Signed in as ${name}`,
   }[v];
   $('#barSub').textContent = { overview: 'running diary', stats: 'stats', runs: `${state.runs.length} runs`, settings: 'settings' }[v];
-  $('#sideName').textContent = name;
-  $('#sideAvatar').textContent = name.slice(0, 1) || '?';
+  renderSideUser();
   renderSideWeek();
   if (v === 'overview') renderOverview();
   else if (v === 'stats') renderStats();
@@ -919,11 +938,13 @@ $('#authForm').addEventListener('submit', async (e) => {
     btn.disabled = false;
   }
 });
-$('#signOut').addEventListener('click', async () => {
+async function signOut() {
   try { await api('POST', '/api/logout'); } catch {}
   state.user = null; state.runs = []; state.signupMode = false;
   showAuth();
-});
+}
+$('#signOut').addEventListener('click', signOut);
+$('#sideSignOut').addEventListener('click', signOut);
 $('#profileForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const msg = $('#pfMsg');

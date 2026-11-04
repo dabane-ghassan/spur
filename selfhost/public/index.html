@@ -41,12 +41,15 @@
     <a class="brand" href="#overview"><span class="logo" data-size="34"></span><b>spur</b></a>
     <nav class="side-nav" aria-label="Sections">
       <a href="#overview" data-tab="overview"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 3 4-7 5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Overview</a>
-      <a href="#runs" data-tab="runs"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="6" r="1.3" fill="currentColor"/><circle cx="4" cy="12" r="1.3" fill="currentColor"/><circle cx="4" cy="18" r="1.3" fill="currentColor"/></svg>Runs</a>
+      <a href="#runs" data-tab="runs"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="4" cy="6" r="1.3" fill="currentColor"/><circle cx="4" cy="12" r="1.3" fill="currentColor"/><circle cx="4" cy="18" r="1.3" fill="currentColor"/></svg><span>Runs</span><span class="count num" id="sideCount"></span></a>
       <a href="#stats" data-tab="stats"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9 13.5L7.5 21l4.5-2.5 4.5 2.5-1.5-7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>Stats</a>
       <a href="#settings" data-tab="settings"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>Settings</a>
     </nav>
     <div class="side-week" id="sideWeek"></div>
-    <a class="side-user" href="#settings"><span class="avatar" id="sideAvatar"></span><span><b id="sideName"></b><span class="muted small">Account and settings</span></span></a>
+    <div class="side-foot">
+      <a class="side-user" href="#settings" title="Profile and settings"><span class="avatar" id="sideAvatar"></span><span class="side-who"><b id="sideName"></b><span id="sideSub"></span></span></a>
+      <button class="side-out" id="sideSignOut" type="button" title="Sign out" aria-label="Sign out"><svg width="19" height="19" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
   </aside>
 
   <div class="main">
