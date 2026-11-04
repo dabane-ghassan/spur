@@ -56,8 +56,6 @@ Future<RunStore> _store({ThemeMode mode = ThemeMode.light}) async {
 
 void main() {
   setUpAll(() async {
-    // flutter_test draws shadows as solid black outlines unless told otherwise.
-    debugDisableShadows = false;
     await _font('Barlow', ['assets/fonts/Barlow-Regular.ttf', 'assets/fonts/Barlow-SemiBold.ttf']);
     await _font('BarlowCondensed', [
       'assets/fonts/BarlowCondensed-Bold.ttf',
@@ -72,12 +70,17 @@ void main() {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
+    // flutter_test draws shadows as solid black outlines unless told otherwise.
+    // It must be set back before the test ends, which shot() does.
+    debugDisableShadows = false;
     await tester.pumpWidget(SpurApp(store: store));
     await tester.pumpAndSettle();
   }
 
-  Future<void> shot(String name) =>
-      expectLater(find.byType(MaterialApp), matchesGoldenFile('out/$name.png'));
+  Future<void> shot(String name) async {
+    await expectLater(find.byType(MaterialApp), matchesGoldenFile('out/$name.png'));
+    debugDisableShadows = true;
+  }
 
   testWidgets('1 overview', (tester) async {
     await phone(tester, await _store());
