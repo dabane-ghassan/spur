@@ -20,10 +20,6 @@ concurrency:
   group: android-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # Permanent app ID once spur is published. Change it before the first release if you want another.
-  APP_ORG: io.github.dabaneghassan
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -43,6 +39,8 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned: F-Droid builds with the same Flutter (fdroid/io.github.dabaneghassan.spur.yml).
+          flutter-version: 3.47.9
           channel: stable
           cache: true
 
@@ -52,8 +50,6 @@ jobs:
           set -o pipefail
           {
             echo "== flutter --version"; flutter --version
-            echo "== flutter create (fills in missing Android build files only)"
-            flutter create --org "$APP_ORG" --project-name spur --platforms android .
             echo "== flutter pub get"; flutter pub get
             echo "== flutter analyze"; flutter analyze --no-fatal-infos
             echo "== flutter test"; flutter test

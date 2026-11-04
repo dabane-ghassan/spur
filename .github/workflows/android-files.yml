@@ -25,6 +25,8 @@ jobs:
           java-version: "17"
       - uses: subosito/flutter-action@v2
         with:
+          # Pinned: F-Droid builds with the same Flutter (fdroid/io.github.dabaneghassan.spur.yml).
+          flutter-version: 3.47.9
           channel: stable
       - name: Generate (if missing), render store screenshots, commit
         shell: bash
@@ -44,7 +46,7 @@ jobs:
           flutter build apk --release
           git config user.name "spur CI"
           git config user.email "ci@users.noreply.github.com"
-          git add android tool "$shots"
+          git add android tool "$shots" pubspec.lock
           [ -f .metadata ] && git add .metadata
           git commit -m "Generated Android build files and store screenshots [generated]" || echo "nothing new"
           git push origin HEAD:android-files

@@ -19,11 +19,12 @@ Builds:
     commit: v1.0.2
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
-      - flutter@FLUTTER_VERSION
+      - flutter@3.47.9
     rm:
       - selfhost
       - site
     prebuild:
+      - sed -i -e '/signingConfig =/d' android/app/build.gradle.kts
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get
