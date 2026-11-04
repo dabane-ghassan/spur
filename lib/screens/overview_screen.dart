@@ -292,19 +292,25 @@ class _TrendControls extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             onSelected: (_) => store.range = r,
           ),
-        IconButton.filledTonal(
-          tooltip: 'Zoom out',
-          visualDensity: VisualDensity.compact,
-          onPressed: window.isFull ? null : () => onView(window.zoom(2)),
-          icon: const Icon(Icons.zoom_out),
+        // The zoom buttons move as one, so they never split across two lines.
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton.filledTonal(
+              tooltip: 'Zoom out',
+              visualDensity: VisualDensity.compact,
+              onPressed: window.isFull ? null : () => onView(window.zoom(2)),
+              icon: const Icon(Icons.zoom_out),
+            ),
+            IconButton.filledTonal(
+              tooltip: 'Zoom in',
+              visualDensity: VisualDensity.compact,
+              onPressed: window.isMin ? null : () => onView(window.zoom(0.5)),
+              icon: const Icon(Icons.zoom_in),
+            ),
+            if (zoomed) TextButton(onPressed: () => store.view.value = null, child: const Text('Reset')),
+          ],
         ),
-        IconButton.filledTonal(
-          tooltip: 'Zoom in',
-          visualDensity: VisualDensity.compact,
-          onPressed: window.isMin ? null : () => onView(window.zoom(0.5)),
-          icon: const Icon(Icons.zoom_in),
-        ),
-        if (zoomed) TextButton(onPressed: () => store.view.value = null, child: const Text('Reset')),
         const SizedBox(width: double.infinity),
         SegmentedButton<Smoothing>(
           segments: [for (final s in Smoothing.values) ButtonSegment(value: s, label: Text(s.label))],
