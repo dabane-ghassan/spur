@@ -9,10 +9,12 @@
 // The images land in tool/screenshots/out/. CI copies them to
 // fastlane/metadata/android/en-US/images/phoneScreenshots/.
 
+// This is a test that lives outside test/, so it is not part of `flutter test`.
+// ignore_for_file: invalid_use_of_visible_for_testing_member
+
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show debugDisableShadows;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
