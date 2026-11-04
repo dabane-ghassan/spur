@@ -1,3 +1,4 @@
-• Ready for F-Droid: every Android build file is now in the source code, and the app carries no Google dependency metadata
+• Range buttons above the charts are readable in light mode again
+• The zoom buttons stay together on narrow screens
+• Ready for F-Droid: all Android build files are in the source, and the app carries no Google dependency metadata
 • New store screenshots taken from the app itself
-• No changes to how the app works
