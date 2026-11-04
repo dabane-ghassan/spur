@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Ghassan Dabane
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../core/analysis.dart';
@@ -26,7 +28,6 @@ class OverviewScreen extends StatelessWidget {
     if (a.isEmpty) return _Welcome(onLogRun: onLogRun, onSamples: store.loadSamples);
 
     final u = store.units;
-    final scheme = Theme.of(context).colorScheme;
     final isPace = store.metric == ChartMetric.pace;
     String metric(double secPerKm) =>
         isPace ? fmtMinSec(u.pace(secPerKm)) : u.speed(secPerKm).toStringAsFixed(1);
@@ -47,9 +48,37 @@ class OverviewScreen extends StatelessWidget {
           status: _trendPill(a, u),
         ),
         const SectionTitle('Trends'),
-        const _TrendControls(),
+        ValueListenableBuilder<(double, double)?>(
+          valueListenable: store.view,
+          builder: (context, view, _) {
+            final w = TrendWindow.of(a, store.range, view);
+            void setView((double, double) v) => store.view.value = v;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TrendControls(window: w, onView: setView),
+                const SizedBox(height: 12),
+                _paceCard(context, a, w, setView),
+                const SizedBox(height: 12),
+                _VolumeCard(analysis: a, units: u, window: w, metric: store.volume, onView: setView),
+                const SizedBox(height: 12),
+                _TimelineCard(analysis: a, window: w, onView: setView),
+              ],
+            );
+          },
+        ),
         const SizedBox(height: 12),
-        Card(
+        _GoalCard(analysis: a, units: u, goal: store.goalSecPerKm),
+      ],
+    );
+  }
+
+  Widget _paceCard(BuildContext context, Analysis a, TrendWindow w, ValueChanged<(double, double)> setView) {
+    final store = StoreScope.read(context);
+    final u = store.units;
+    final scheme = Theme.of(context).colorScheme;
+    final isPace = store.metric == ChartMetric.pace;
+    return Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -58,12 +87,18 @@ class OverviewScreen extends StatelessWidget {
                 Text(isPace ? 'Pace over time' : 'Speed over time',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 12),
-                PaceChart(
-                  analysis: a,
-                  units: u,
-                  metric: store.metric,
-                  range: store.range,
-                  goalSecPerKm: store.goalSecPerKm,
+                _InView(analysis: a, units: u, window: w, isPace: isPace),
+                const SizedBox(height: 10),
+                ZoomGestures(
+                  window: w,
+                  onView: setView,
+                  child: PaceChart(
+                    analysis: a,
+                    units: u,
+                    metric: store.metric,
+                    window: w,
+                    goalSecPerKm: store.goalSecPerKm,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -98,13 +133,7 @@ class OverviewScreen extends StatelessWidget {
               ],
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        _VolumeCard(analysis: a, units: u, range: store.range, metric: store.volume),
-        const SizedBox(height: 12),
-        _GoalCard(analysis: a, units: u, goal: store.goalSecPerKm),
-      ],
-    );
+        );
   }
 
   Widget _trendPill(Analysis a, Units u) {
@@ -239,12 +268,17 @@ class _GoalCard extends StatelessWidget {
 }
 
 /// Time range and smoothing strength, shared by the pace and volume charts.
+/// Time range, zoom and smoothing strength, shared by the pace and volume charts.
 class _TrendControls extends StatelessWidget {
-  const _TrendControls();
+  const _TrendControls({required this.window, required this.onView});
+
+  final TrendWindow window;
+  final ValueChanged<(double, double)> onView;
 
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
+    final zoomed = store.view.value != null;
     return Wrap(
       spacing: 6,
       runSpacing: 10,
@@ -253,11 +287,24 @@ class _TrendControls extends StatelessWidget {
         for (final r in ChartRange.values)
           ChoiceChip(
             label: Text(r.label),
-            selected: store.range == r,
+            selected: !zoomed && store.range == r,
             showCheckmark: false,
             visualDensity: VisualDensity.compact,
             onSelected: (_) => store.range = r,
           ),
+        IconButton.filledTonal(
+          tooltip: 'Zoom out',
+          visualDensity: VisualDensity.compact,
+          onPressed: window.isFull ? null : () => onView(window.zoom(2)),
+          icon: const Icon(Icons.zoom_out),
+        ),
+        IconButton.filledTonal(
+          tooltip: 'Zoom in',
+          visualDensity: VisualDensity.compact,
+          onPressed: window.isMin ? null : () => onView(window.zoom(0.5)),
+          icon: const Icon(Icons.zoom_in),
+        ),
+        if (zoomed) TextButton(onPressed: () => store.view.value = null, child: const Text('Reset')),
         const SizedBox(width: double.infinity),
         SegmentedButton<Smoothing>(
           segments: [for (final s in Smoothing.values) ButtonSegment(value: s, label: Text(s.label))],
@@ -271,13 +318,103 @@ class _TrendControls extends StatelessWidget {
   }
 }
 
-class _VolumeCard extends StatelessWidget {
-  const _VolumeCard({required this.analysis, required this.units, required this.range, required this.metric});
+/// Runs, distance, average and fastest pace inside the visible window.
+class _InView extends StatelessWidget {
+  const _InView({required this.analysis, required this.units, required this.window, required this.isPace});
 
   final Analysis analysis;
   final Units units;
-  final ChartRange range;
+  final TrendWindow window;
+  final bool isPace;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final runs = [for (final r in analysis.runs) if (r.day >= window.t0 && r.day <= window.t1) r];
+    String fmt(double secPerKm) => isPace ? fmtMinSec(units.pace(secPerKm)) : units.speed(secPerKm).toStringAsFixed(1);
+    final unit = isPace ? units.paceName : units.speedName;
+    final km = runs.fold<double>(0.0, (s, r) => s + r.km), sec = runs.fold<int>(0, (s, r) => s + r.seconds);
+    final long = runs.where((r) => r.km >= 3);
+    final fastest = long.isEmpty ? null : long.map((r) => r.secPerKm).reduce(math.min);
+    Widget item(String v, String label) => Text.rich(TextSpan(children: [
+          TextSpan(text: v, style: displayStyle(18, scheme.onSurface, weight: FontWeight.w700)),
+          TextSpan(text: ' $label', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        ]));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+      child: runs.isEmpty
+          ? Text('No runs in this part of the timeline', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13))
+          : Wrap(spacing: 14, runSpacing: 2, children: [
+              item('${runs.length}', runs.length == 1 ? 'run' : 'runs'),
+              item(units.distance(km), units.name),
+              item(fmt(sec / km), '$unit avg'),
+              if (fastest != null) item(fmt(fastest), 'fastest'),
+            ]),
+    );
+  }
+}
+
+/// The whole history with the visible window, plus the dates shown.
+class _TimelineCard extends StatelessWidget {
+  const _TimelineCard({required this.analysis, required this.window, required this.onView});
+
+  final Analysis analysis;
+  final TrendWindow window;
+  final ValueChanged<(double, double)> onView;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  Text('TIMELINE', style: labelStyle(context)),
+                  const Spacer(),
+                  Text(
+                    '${fmtLongDate(window.t0.round())} – ${fmtLongDate(window.t1.round())}',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, fontFeatures: tabular, color: scheme.onSurface),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            TimelineStrip(analysis: analysis, window: window, onView: onView),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+              child: Text(
+                'Drag a chart sideways to move through time. Pinch or double-tap to zoom, or drag the window here.',
+                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VolumeCard extends StatelessWidget {
+  const _VolumeCard({
+    required this.analysis,
+    required this.units,
+    required this.window,
+    required this.metric,
+    required this.onView,
+  });
+
+  final Analysis analysis;
+  final Units units;
+  final TrendWindow window;
   final VolumeMetric metric;
+  final ValueChanged<(double, double)> onView;
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +493,11 @@ class _VolumeCard extends StatelessWidget {
             const SizedBox(height: 8),
             Wrap(spacing: 6, runSpacing: 6, children: [StatusPill(change), loadPill]),
             const SizedBox(height: 12),
-            VolumeChart(analysis: analysis, units: units, range: range, metric: metric),
+            ZoomGestures(
+              window: window,
+              onView: onView,
+              child: VolumeChart(analysis: analysis, units: units, window: window, metric: metric),
+            ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 16,

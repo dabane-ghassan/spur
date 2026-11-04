@@ -8,6 +8,7 @@ import 'package:spur/core/dates.dart';
 import 'package:spur/core/units.dart';
 import 'package:spur/data/run_store.dart';
 import 'package:spur/models/run.dart';
+import 'package:spur/ui/charts.dart';
 
 Run run(int day, double km, int sec) => Run(id: 'r$day', day: day, km: km, seconds: sec);
 
@@ -159,6 +160,43 @@ void main() {
     expect(a.name.length, lessThanOrEqualTo(40));
     expect(a.heightCm, isNull, reason: 'a height of 40 cm is refused');
     expect(fmtHeight(178, const Units(DistanceUnit.mi)), '5 ft 10 in');
+  });
+
+  group('precomputed trends and zoom', () {
+    final today = dayFromYmd(2026, 11, 2);
+
+    test('precomputed series match the day-by-day calculations', () {
+      final runs = makeSampleRuns(today);
+      for (final s in Smoothing.values) {
+        final a = Analysis(runs, today: today, smoothing: s);
+        final daily = a.dailyVolume(VolumeMetric.distance);
+        for (var t = a.seriesStart; t <= a.seriesEnd; t += 3) {
+          final want = a.smoothAt(t), got = a.paceOn(t);
+          if (want == null) {
+            expect(got, isNull, reason: '${s.name} pace on $t');
+          } else {
+            expect(got, closeTo(want, 1e-6), reason: '${s.name} pace on $t');
+          }
+          expect(a.volumeOn(t, VolumeMetric.distance), closeTo(a.volumeAt(t, daily)!, 1e-6), reason: '${s.name} volume on $t');
+        }
+      }
+    });
+
+    test('the zoom window stays inside the history', () {
+      final a = Analysis(makeSampleRuns(today), today: today);
+      final all = TrendWindow.of(a, ChartRange.all, null);
+      expect(all.isFull, isTrue);
+      final (z0, z1) = all.zoom(0.25);
+      expect(z1 - z0, closeTo(all.span / 4, 1e-9));
+      final w = TrendWindow(z0, z1, all.lo, all.hi);
+      final (p0, p1) = w.pan(-10000);
+      expect(p0, all.lo, reason: 'panning stops at the first run');
+      expect(p1 - p0, closeTo(w.span, 1e-9));
+      final (m0, m1) = w.zoom(0.0001);
+      expect(m1 - m0, closeTo(TrendWindow.minSpan, 1e-9));
+      final (o0, o1) = w.zoom(100);
+      expect((o0, o1), (all.lo, all.hi));
+    });
   });
 
   group('store', () {

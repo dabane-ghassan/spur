@@ -121,7 +121,14 @@ class RunStore extends ChangeNotifier {
 
   set unit(DistanceUnit v) => _set(() => _unit = v);
   set metric(ChartMetric v) => _set(() => _metric = v);
-  set range(ChartRange v) => _set(() => _range = v);
+  set range(ChartRange v) {
+    view.value = null;
+    _set(() => _range = v);
+  }
+
+  /// The zoomed part of the timeline shown by the trend charts, as (first day,
+  /// last day). Null shows the chosen [range]. Not saved: zoom is for exploring.
+  final ValueNotifier<(double, double)?> view = ValueNotifier(null);
   set palette(String v) => _set(() => _palette = v);
   set themeMode(ThemeMode v) => _set(() => _themeMode = v);
   set goalSecPerKm(double? v) => _set(() => _goalSecPerKm = v);

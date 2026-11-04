@@ -20,13 +20,19 @@ const pad = (n) => String(n).padStart(2, '0');
 const dn = (s) => { const [y, m, d] = s.split('-').map(Number); return Math.round(Date.UTC(y, m - 1, d) / DAY); };
 const localToday = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const today = () => dn(localToday());
-const fd = (n, o) => new Date(n * DAY).toLocaleDateString(undefined, Object.assign({ timeZone: 'UTC' }, o));
+const fmtCache = new Map(); // building a date formatter is slow, so keep one per style
+const fd = (n, o) => {
+  const key = JSON.stringify(o || {});
+  let f = fmtCache.get(key);
+  if (!f) { f = new Intl.DateTimeFormat(undefined, Object.assign({ timeZone: 'UTC' }, o)); fmtCache.set(key, f); }
+  return f.format(new Date(n * DAY));
+};
 const dow = (n) => (new Date(n * DAY).getUTCDay() + 6) % 7;
 const weekStart = (n) => n - dow(n);
 
 /* ---------- state ---------- */
 const DEFAULTS = { unit: 'km', metric: 'pace', palette: 'tartan', mode: 'system', goal: null, range: '3M', smoothing: 'medium', volume: 'distance' };
-const state = { user: null, runs: [], settings: { ...DEFAULTS }, version: '', auth: null, signupMode: false, sort: { key: 'date', dir: -1 }, year: 'all' };
+const state = { user: null, runs: [], settings: { ...DEFAULTS }, version: '', auth: null, signupMode: false, sort: { key: 'date', dir: -1 }, year: 'all', view: null };
 
 /* ---------- server ---------- */
 async function api(method, path, body) {
@@ -181,130 +187,250 @@ function applyTheme() {
 const logo = (sz) => `<svg width="${sz}" height="${sz}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="var(--accent)"/><ellipse cx="17" cy="31" rx="4.5" ry="7.5" transform="rotate(-18 17 31)" fill="var(--on-accent)"/><ellipse cx="31" cy="17" rx="4.5" ry="7.5" transform="rotate(-18 31 17)" fill="var(--on-accent)"/><circle cx="13" cy="21" r="1.6" fill="var(--on-accent)" opacity=".6"/><circle cx="35" cy="27" r="1.6" fill="var(--on-accent)" opacity=".6"/></svg>`;
 
 /* ---------- charts ---------- */
-function niceStep(span, steps) { for (const s of steps) if (span / s <= 5) return s; return steps[steps.length - 1]; }
-function chartRange(a) {
-  const rd = { '1M': 30, '3M': 91, '6M': 182, '1Y': 365 }[state.settings.range];
-  const t1 = Math.max(today(), a.last);
-  return { t0: rd ? t1 - rd : a.pts[0].t - 3, t1 };
+/* ---------- precomputed trend lines ---------- */
+// The trend for every day of the history, worked out once per change of data or
+// settings, so zooming and panning only have to draw.
+let seriesCache = null;
+function series() {
+  const s = state.settings;
+  let sumSec = 0, sumKm = 0;
+  for (const r of state.runs) { sumSec += r.sec; sumKm += r.km; }
+  const key = [state.runs.length, sumSec, sumKm.toFixed(3), s.smoothing, s.volume, U(), today()].join('|');
+  if (seriesCache && seriesCache.key === key) return seriesCache;
+  const pts = points();
+  if (!pts.length) return (seriesCache = { key, empty: true });
+  const D0 = pts[0].t, D1 = Math.max(today(), pts[pts.length - 1].t), n = D1 - D0 + 1;
+  const sig = sigma(), gap = gapLimit(sig), reach = Math.ceil(4 * sig);
+  const sumP = new Float64Array(n), cnt = new Float64Array(n), lastP = new Array(n).fill(null), daily = new Float64Array(n), dailyKm = new Float64Array(n);
+  for (const p of pts) { const i = p.t - D0; sumP[i] += p.v; cnt[i]++; lastP[i] = p.v; daily[i] += volOfRun(p.r); dailyKm[i] += p.r.km; }
+  const w = []; for (let d = 0; d <= reach; d++) w.push(sig ? Math.exp((-d * d) / (2 * sig * sig)) : 1);
+  const pace = new Array(n).fill(null), vol = new Float64Array(n), last7 = new Float64Array(n);
+  let nearest = -1e9, latest = null;
+  for (let i = 0; i < n; i++) {
+    if (cnt[i]) { nearest = i; latest = lastP[i]; }
+    last7[i] = daily[i] + (i > 0 ? last7[i - 1] : 0) - (i >= 7 ? daily[i - 7] : 0);
+    if (i - nearest <= gap) {
+      if (!sig) pace[i] = latest;
+      else {
+        let sw = 0, sv = 0;
+        for (let d = 0; d <= reach && d <= i; d++) if (cnt[i - d]) { sw += w[d] * cnt[i - d]; sv += w[d] * sumP[i - d]; }
+        pace[i] = sw > 1e-6 ? sv / sw : null;
+      }
+    }
+    if (!sig) vol[i] = last7[i];
+    else { let sw = 0, sv = 0; for (let d = 0; d <= reach && d <= i; d++) { sw += w[d]; sv += w[d] * last7[i - d]; } vol[i] = sv / sw; }
+  }
+  return (seriesCache = { key, D0, D1, pace, vol, daily, dailyKm, pts });
 }
+
+/* ---------- the visible window, shared by both trend charts ---------- */
+const MIN_SPAN = 14;
+function bounds() { const ser = series(); return { lo: ser.D0 - 3, hi: ser.D1 }; }
+function viewWindow() {
+  const { lo, hi } = bounds();
+  if (state.view) return { t0: state.view.t0, t1: state.view.t1, lo, hi };
+  const rd = { '1M': 30, '3M': 91, '6M': 182, '1Y': 365 }[state.settings.range];
+  return { t0: rd ? hi - rd : lo, t1: hi, lo, hi };
+}
+function chartRange() { const v = viewWindow(); return { t0: v.t0, t1: v.t1 }; }
+function setView(t0, t1) {
+  const { lo, hi } = bounds();
+  let span = Math.min(Math.max(t1 - t0, MIN_SPAN), hi - lo);
+  if (t0 < lo) t0 = lo;
+  if (t0 + span > hi) t0 = hi - span;
+  if (t0 < lo) t0 = lo;
+  state.view = { t0, t1: t0 + span };
+  drawTrends();
+}
+function zoomBy(factor, centerDay) {
+  const v = viewWindow(), c = centerDay ?? (v.t0 + v.t1) / 2, span = (v.t1 - v.t0) * factor;
+  const f = (c - v.t0) / (v.t1 - v.t0);
+  setView(c - f * span, c - f * span + span);
+}
+let drawPending = false;
+function drawTrends() {
+  if (drawPending) return;
+  drawPending = true;
+  requestAnimationFrame(() => {
+    drawPending = false;
+    if (!state.user || currentTab() !== 'overview' || !state.runs.length) return;
+    paceChart(); volumeChart(); navChart(); zoomStatus();
+  });
+}
+function zoomStatus() {
+  const v = viewWindow(), full = v.t1 - v.t0 >= v.hi - v.lo - 0.5;
+  const opts = { day: 'numeric', month: 'short', year: 'numeric' };
+  $('#zoomLabel').textContent = `${fd(Math.round(v.t0), opts)} – ${fd(Math.round(v.t1), opts)}`;
+  $('#zoomIn').disabled = v.t1 - v.t0 <= MIN_SPAN + 0.5;
+  $('#zoomOut').disabled = full;
+  $('#zoomReset').hidden = !state.view;
+  $$('#rangeSeg button').forEach((b) => b.setAttribute('aria-pressed', !state.view && b.dataset.v === state.settings.range));
+}
+
+/* ---------- time axis ---------- */
+function niceStep(span, steps) { for (const s of steps) if (span / s <= 5) return s; return steps[steps.length - 1]; }
 function timeTicks(t0, t1) {
   const span = t1 - t0, ticks = [];
-  if (span <= 45) { for (let t = weekStart(t0) + 7; t <= t1; t += 7) ticks.push([t, fd(t, { day: 'numeric', month: 'short' })]); return ticks; }
-  const d0 = new Date(t0 * DAY); let yy = d0.getUTCFullYear(), mm = d0.getUTCMonth() + 1, i = 0;
+  if (span <= 45) { for (let t = weekStart(Math.floor(t0)) + 7; t <= t1; t += 7) ticks.push([t, fd(t, { day: 'numeric', month: 'short' })]); return ticks; }
+  const d0 = new Date(Math.floor(t0) * DAY);
+  if (span > 900) {
+    for (let yy = d0.getUTCFullYear() + 1; ; yy++) { const t = Math.round(Date.UTC(yy, 0, 1) / DAY); if (t > t1) break; ticks.push([t, String(yy)]); }
+    return ticks;
+  }
+  let yy = d0.getUTCFullYear(), mm = d0.getUTCMonth() + 1, i = 0;
   const every = span > 500 ? 3 : span > 200 ? 2 : 1;
   for (;;) { if (mm > 11) { mm = 0; yy++; } const t = Math.round(Date.UTC(yy, mm, 1) / DAY); if (t > t1) break; if (i++ % every === 0) ticks.push([t, fd(t, span > 300 ? { month: 'short', year: '2-digit' } : { month: 'short' })]); mm++; }
   return ticks;
 }
-function paceChart() {
-  const el = $('#paceChart'), a = analysis(), s = state.settings, pace = isPace();
-  $('#chartTitle').textContent = pace ? 'Pace over time' : 'Speed over time';
-  if (!a.pts.length) { el.innerHTML = '<div class="empty">No runs yet. Tap <b>Log run</b> to add your first.</div>'; return; }
-  const W = Math.max(280, el.clientWidth || 320), H = W >= 640 ? Math.round(Math.min(380, Math.max(260, W * 0.4))) : Math.round(Math.min(260, Math.max(200, W * 0.52)));
-  const P = { l: 42, r: 14, t: 16, b: 26 }, iw = W - P.l - P.r, ih = H - P.t - P.b;
-  const { t0, t1 } = chartRange(a);
-  const inR = a.pts.filter((p) => p.t >= t0 && p.t <= t1);
-  const sm = [];
-  for (let t = t0; t <= t1; t++) { const v = smoothAt(t, a.pts); sm.push(v == null ? null : { t, v: metricVal(v) }); }
-  const vals = inR.map((p) => metricVal(p.v)).concat(sm.filter(Boolean).map((p) => p.v));
-  const goalV = s.goal ? metricVal(s.goal) : null;
-  if (goalV != null) vals.push(goalV);
-  if (!inR.length && !sm.some(Boolean)) { el.innerHTML = '<div class="empty">No runs in this range. Try a longer one.</div>'; $('#goalLegend').hidden = true; return; }
-  let lo = Math.min(...vals), hi = Math.max(...vals);
-  const step = pace ? niceStep(hi - lo, [10, 15, 20, 30, 60, 120, 300]) : niceStep(hi - lo, [0.25, 0.5, 1, 2, 5, 10]);
-  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi <= lo) hi = lo + step;
-  const x = (t) => P.l + ((t - t0) / Math.max(1, t1 - t0)) * iw;
-  const y = (v) => (pace ? P.t + ((v - lo) / (hi - lo)) * ih : P.t + ((hi - v) / (hi - lo)) * ih);
-  let g = '';
-  for (let v = lo; v <= hi + 1e-9; v += step) {
-    const yy = y(v).toFixed(1);
-    g += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${yy}" y2="${yy}" stroke-dasharray="${v === lo || v >= hi - 1e-9 ? '' : '2 4'}"/><text x="${P.l - 6}" y="${+yy + 4}" text-anchor="end">${metricFmt(v)}</text>`;
-  }
+function drawAxis(g, t0, t1, x, P, W, H) {
   for (const [t, l] of timeTicks(t0, t1)) {
     const xx = x(t);
     if (xx < P.l + 12 || xx > W - P.r - 12) continue;
-    g += `<line class="axis" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${H - P.b}" y2="${H - P.b + 4}"/><text x="${xx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(l)}</text>`;
+    g.push(`<line class="axis" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${H - P.b}" y2="${H - P.b + 4}"/><text x="${xx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(l)}</text>`);
   }
-  g += `<text x="${P.l + 4}" y="${P.t - 4}" style="font-size:10.5px;letter-spacing:.06em">▲ FASTER</text>`;
+}
+function pathFrom(list, x, y) {
+  let d = '', prev = false;
+  for (const p of list) { if (!p) { prev = false; continue; } d += (prev ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1); prev = true; }
+  return d;
+}
+
+/* ---------- pace chart ---------- */
+function paceChart() {
+  const el = $('#paceChart'), ser = series(), s = state.settings, pace = isPace();
+  $('#chartTitle').textContent = pace ? 'Pace over time' : 'Speed over time';
+  if (ser.empty) { el.innerHTML = '<div class="empty">No runs yet. Tap <b>Log run</b> to add your first.</div>'; return; }
+  const W = Math.max(280, el.clientWidth || 320), H = W >= 640 ? Math.round(Math.min(360, Math.max(260, W * 0.4))) : Math.round(Math.min(260, Math.max(200, W * 0.52)));
+  const P = { l: 42, r: 14, t: 16, b: 26 }, iw = W - P.l - P.r, ih = H - P.t - P.b;
+  const { t0, t1 } = chartRange(), span = Math.max(1, t1 - t0);
+  const inR = ser.pts.filter((p) => p.t >= t0 && p.t <= t1);
+  const stepD = Math.max(1, Math.floor(span / iw)); // about one trend point per pixel
+  const sm = [];
+  if (smoothingOn()) for (let t = Math.ceil(t0); t <= t1; t += stepD) { const i = t - ser.D0, v = i >= 0 && i < ser.pace.length ? ser.pace[i] : null; sm.push(v == null ? null : { t, v: metricVal(v) }); }
+  const vals = inR.map((p) => metricVal(p.v)).concat(sm.filter(Boolean).map((p) => p.v));
+  const goalV = s.goal ? metricVal(s.goal) : null;
+  if (goalV != null && vals.length) vals.push(goalV);
+  el._geom = { W, l: P.l, iw };
+  if (!vals.length) { el.innerHTML = '<div class="empty">No runs in this part of the timeline. Zoom out or move along.</div>'; $('#goalLegend').hidden = true; return; }
+  // Scale to your typical runs: the odd walk or hike would otherwise flatten everything.
+  const dotVals = inR.map((p) => metricVal(p.v)).sort((a, b) => a - b);
+  const pick = (f) => dotVals[Math.min(dotVals.length - 1, Math.max(0, Math.round(f * (dotVals.length - 1))))];
+  const core = (dotVals.length >= 20 ? [pick(0.02), pick(0.98)] : dotVals).concat(sm.filter(Boolean).map((p) => p.v), goalV != null ? [goalV] : []);
+  let lo = Math.min(...core), hi = Math.max(...core);
+  const step = pace ? niceStep(hi - lo, [10, 15, 20, 30, 60, 120, 300]) : niceStep(hi - lo, [0.25, 0.5, 1, 2, 5, 10]);
+  lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step; if (hi <= lo) hi = lo + step;
+  const x = (t) => P.l + ((t - t0) / span) * iw;
+  const yRaw = (v) => (pace ? P.t + ((v - lo) / (hi - lo)) * ih : P.t + ((hi - v) / (hi - lo)) * ih);
+  const y = (v) => Math.min(P.t + ih, Math.max(P.t, yRaw(v)));
+  const g = [`<defs><clipPath id="pcClip"><rect x="${P.l}" y="0" width="${iw}" height="${H}"/></clipPath></defs>`];
+  for (let v = lo; v <= hi + 1e-9; v += step) {
+    const yy = y(v).toFixed(1);
+    g.push(`<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${yy}" y2="${yy}" stroke-dasharray="${v === lo || v >= hi - 1e-9 ? '' : '2 4'}"/><text x="${P.l - 6}" y="${+yy + 4}" text-anchor="end">${metricFmt(v)}</text>`);
+  }
+  drawAxis(g, t0, t1, x, P, W, H);
+  g.push(`<text x="${P.l + 4}" y="${P.t - 4}" style="font-size:10.5px;letter-spacing:.06em">▲ FASTER</text>`);
   if (goalV != null) {
     const gy = y(goalV).toFixed(1);
-    g += `<line x1="${P.l}" x2="${W - P.r}" y1="${gy}" y2="${gy}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="6 5"/><text x="${W - P.r}" y="${+gy - 5}" text-anchor="end" style="fill:var(--fg);font-weight:600">goal ${metricFmt(goalV)}</text>`;
+    g.push(`<line x1="${P.l}" x2="${W - P.r}" y1="${gy}" y2="${gy}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="6 5"/><text x="${W - P.r}" y="${+gy - 5}" text-anchor="end" style="fill:var(--fg);font-weight:600">goal ${metricFmt(goalV)}</text>`);
   }
+  // Fewer pixels per run → smaller, lighter dots, so a long history stays readable.
+  const density = inR.length / iw;
+  const r0 = density > 0.6 ? 1.6 : density > 0.3 ? 2.2 : 3, dense = density > 0.3;
+  g.push('<g clip-path="url(#pcClip)">');
   for (const p of inR) {
-    const v = metricVal(p.v);
-    g += `<circle cx="${x(p.t).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${p.r.km >= 10 ? 4 : 3}" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.4"><title>${esc(fd(p.t, { weekday: 'short', day: 'numeric', month: 'short' }))}: ${fmtDist(p.r.km)} ${uName()} · ${metricFmt(v)} ${metricUnit()}</title></circle>`;
+    const v = metricVal(p.v), rr = p.r.km >= 10 && !dense ? r0 + 1 : r0, off = y(v) !== yRaw(v);
+    g.push(`<circle cx="${x(p.t).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${off ? 1.8 : rr}" fill="${off ? 'none' : 'var(--accent-soft)'}" stroke="var(--accent)" stroke-width="${dense ? 0.8 : 1.4}" opacity="${off ? 0.45 : dense ? 0.55 : 1}"><title>${esc(fd(p.t, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}: ${fmtDist(p.r.km)} ${uName()} · ${metricFmt(v)} ${metricUnit()}</title></circle>`);
   }
-  let d = '', prev = null;
   if (smoothingOn()) {
-    for (const p of sm) { if (!p) { prev = null; continue; } d += (prev ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1); prev = p; }
-    if (d) g += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity=".18"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const d = pathFrom(sm, x, y);
+    if (d) g.push(`<path d="${d}" fill="none" stroke="var(--surface)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".7"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>`);
     const end = [...sm].reverse().find(Boolean);
-    if (end) g += `<circle cx="${x(end.t).toFixed(1)}" cy="${y(end.v).toFixed(1)}" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2.5"/>`;
+    if (end && t1 >= today() - 1) g.push(`<circle cx="${x(end.t).toFixed(1)}" cy="${y(end.v).toFixed(1)}" r="6" fill="var(--accent)" stroke="var(--surface)" stroke-width="2.5"/>`);
   } else {
-    // Smoothing off: join the runs as they are, breaking the line across long gaps.
+    let d = '', prev = null;
     for (const p of inR) { d += (prev && p.t - prev.t <= gapLimit(0) ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(metricVal(p.v)).toFixed(1); prev = p; }
-    if (d) g += `<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/>`;
+    if (d) g.push(`<path d="${d}" fill="none" stroke="var(--accent)" stroke-width="${dense ? 1 : 1.6}" stroke-linejoin="round" opacity=".75"/>`);
   }
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${pace ? 'Pace' : 'Speed'} per run${smoothingOn() ? ' with smoothed trend' : ''}">${g}</svg>`;
+  g.push('</g>');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${pace ? 'Pace' : 'Speed'} per run${smoothingOn() ? ' with smoothed trend' : ''}">${g.join('')}</svg>`;
+  // What's in the window: handy for comparing one period with another.
+  const km = inR.reduce((a, p) => a + p.r.km, 0), sec = inR.reduce((a, p) => a + p.r.sec, 0);
+  const fastest = inR.filter((p) => p.r.km >= 3).reduce((b, p) => (!b || p.v < b.v ? p : b), null);
+  $('#paceInView').innerHTML = inR.length
+    ? `<span><b>${inR.length}</b> ${inR.length === 1 ? 'run' : 'runs'}</span><span><b>${fmtDist(km)}</b> ${uName()}</span><span><b>${metricFmt(metricVal(sec / km))}</b> ${metricUnit()} average</span>${fastest ? `<span><b>${metricFmt(metricVal(fastest.v))}</b> fastest (3 km+)</span>` : ''}`
+    : '<span>No runs in this part of the timeline</span>';
   $('#goalLegend').hidden = goalV == null;
   $('#trendLegend').textContent = smoothingOn() ? `Trend · ${SMOOTHING_NAME[state.settings.smoothing].toLowerCase()} smoothing` : 'Runs joined, no smoothing';
 }
-function volumeChart(a) {
-  const el = $('#volChart'), daily = dailyVolume(), cur = weekStart(today());
-  const { t0, t1 } = chartRange(a);
+
+/* ---------- volume chart ---------- */
+function volumeChart() {
+  const el = $('#volChart'), ser = series(), cur = weekStart(today());
+  if (ser.empty) return;
+  const { t0, t1 } = chartRange(), span = Math.max(1, t1 - t0);
   const W = Math.max(280, el.clientWidth || 320), H = W >= 640 ? Math.round(Math.min(300, Math.max(220, W * 0.32))) : 190;
   const P = { l: 42, r: 14, t: 16, b: 26 }, iw = W - P.l - P.r, ih = H - P.t - P.b;
-  // Calendar weeks (Monday to Sunday) that overlap the range.
-  const weeks = [];
-  for (let w = weekStart(t0); w <= t1; w += 7) { let v = 0; for (let d = 0; d < 7; d++) v += daily.m.get(w + d) || 0; weeks.push([w, v]); }
-  const trend = [];
-  if (smoothingOn()) for (let t = t0; t <= t1; t++) { const v = volumeAt(t, daily); trend.push(v == null ? null : { t, v }); }
-  const vals = weeks.map((w) => w[1]).concat(trend.filter(Boolean).map((p) => p.v));
+  const dayAt = (t) => { const i = t - ser.D0; return i >= 0 && i < ser.daily.length ? ser.daily[i] : 0; };
+  // Weekly bars, or monthly bars (as an average per week) when weeks get too thin to see.
+  const monthly = (7 * iw) / span < 4;
+  const bars = [];
+  if (!monthly) {
+    for (let w = weekStart(Math.floor(t0)); w <= t1; w += 7) { let v = 0; for (let d = 0; d < 7; d++) v += dayAt(w + d); bars.push({ a: w, b: w + 7, v, cur: w === cur, tip: `Week of ${fd(w, { day: 'numeric', month: 'short', year: 'numeric' })}${w === cur ? ' (so far)' : ''}: ${fmtVol(v)} ${volUnit()}` }); }
+  } else {
+    let d0 = new Date(Math.floor(t0) * DAY), yy = d0.getUTCFullYear(), mm = d0.getUTCMonth();
+    for (;;) {
+      const a = Math.round(Date.UTC(yy, mm, 1) / DAY), b = Math.round(Date.UTC(yy, mm + 1, 1) / DAY);
+      if (a > t1) break;
+      let tot = 0; for (let t = a; t < b; t++) tot += dayAt(t);
+      const days = Math.max(1, Math.min(b, today() + 1) - a);
+      bars.push({ a, b, v: (tot / days) * 7, cur: a <= today() && today() < b, tip: `${fd(a, { month: 'long', year: 'numeric' })}: ${fmtVol(tot)} ${volUnit()} (${fmtVol((tot / days) * 7)} ${volUnit()}/week)` });
+      mm++; if (mm > 11) { mm = 0; yy++; }
+    }
+  }
+  const stepD = Math.max(1, Math.floor(span / iw)), trend = [];
+  if (smoothingOn()) for (let t = Math.ceil(t0); t <= t1; t += stepD) { const i = t - ser.D0; trend.push(i >= 0 && i < ser.vol.length ? { t, v: ser.vol[i] } : null); }
+  const vals = bars.map((b) => b.v).concat(trend.filter(Boolean).map((p) => p.v));
   const step = niceStep(Math.max(...vals, 1), volIsTime() ? [0.5, 1, 2, 3, 5, 10] : [5, 10, 20, 25, 50, 100]);
   const hi = Math.max(step, Math.ceil(Math.max(...vals, 0.0001) / step) * step);
-  const x = (t) => P.l + ((t - t0) / Math.max(1, t1 - t0)) * iw;
+  const x = (t) => P.l + ((t - t0) / span) * iw;
   const y = (v) => P.t + ((hi - v) / hi) * ih;
-  let g = '';
+  el._geom = { W, l: P.l, iw };
+  const g = [`<defs><clipPath id="vcClip"><rect x="${P.l}" y="0" width="${iw}" height="${H}"/></clipPath></defs>`];
   for (let v = 0; v <= hi + 1e-9; v += step) {
     const yy = y(v).toFixed(1);
-    g += `<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${yy}" y2="${yy}" stroke-dasharray="${v === 0 ? '' : '2 4'}"/><text x="${P.l - 6}" y="${+yy + 4}" text-anchor="end">${v % 1 ? v.toFixed(1) : v}</text>`;
+    g.push(`<line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${yy}" y2="${yy}" stroke-dasharray="${v === 0 ? '' : '2 4'}"/><text x="${P.l - 6}" y="${+yy + 4}" text-anchor="end">${v % 1 ? v.toFixed(1) : v}</text>`);
   }
-  for (const [t, l] of timeTicks(t0, t1)) {
-    const xx = x(t);
-    if (xx < P.l + 12 || xx > W - P.r - 12) continue;
-    g += `<line class="axis" x1="${xx.toFixed(1)}" x2="${xx.toFixed(1)}" y1="${H - P.b}" y2="${H - P.b + 4}"/><text x="${xx.toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(l)}</text>`;
-  }
-  g += `<text x="${P.l + 4}" y="${P.t - 4}" style="font-size:10.5px;letter-spacing:.06em">${volUnit().toUpperCase()} / WEEK</text>`;
-  const dayW = iw / Math.max(1, t1 - t0);
-  for (const [w, v] of weeks) {
-    const xa = Math.max(P.l, x(w) + dayW * 0.6), xb = Math.min(W - P.r, x(w + 7) - dayW * 0.6);
-    if (v <= 0 || xb - xa < 1) continue;
-    const isCur = w === cur, top = y(v);
-    g += `<rect x="${xa.toFixed(1)}" y="${top.toFixed(1)}" width="${(xb - xa).toFixed(1)}" height="${(H - P.b - top).toFixed(1)}" rx="${Math.min(4, (xb - xa) / 3).toFixed(1)}" fill="${isCur ? 'var(--accent)' : 'var(--accent-soft)'}" stroke="${isCur ? 'none' : 'var(--accent)'}" stroke-opacity=".55" stroke-width="1"><title>Week of ${esc(fd(w, { day: 'numeric', month: 'short' }))}${isCur ? ' (so far)' : ''}: ${fmtVol(v)} ${volUnit()}</title></rect>`;
+  drawAxis(g, t0, t1, x, P, W, H);
+  g.push(`<text x="${P.l + 4}" y="${P.t - 4}" style="font-size:10.5px;letter-spacing:.06em">${volUnit().toUpperCase()} / WEEK${monthly ? ' · MONTHLY AVERAGE' : ''}</text>`);
+  g.push('<g clip-path="url(#vcClip)">');
+  const gapPx = monthly ? 1 : Math.min(3, (iw / span) * 0.6);
+  for (const bar of bars) {
+    const xa = x(bar.a) + gapPx, xb = x(bar.b) - gapPx;
+    if (bar.v <= 0 || xb - xa < 0.6) continue;
+    const top = y(bar.v);
+    g.push(`<rect x="${xa.toFixed(1)}" y="${top.toFixed(1)}" width="${(xb - xa).toFixed(1)}" height="${(H - P.b - top).toFixed(1)}" rx="${Math.min(4, (xb - xa) / 3).toFixed(1)}" fill="${bar.cur ? 'var(--accent)' : 'var(--accent-soft)'}" stroke="${bar.cur ? 'none' : 'var(--accent)'}" stroke-opacity=".55" stroke-width="${xb - xa > 4 ? 1 : 0}"><title>${esc(bar.tip)}</title></rect>`);
   }
   if (trend.length) {
-    let d = '', prev = null;
-    for (const p of trend) { if (!p) { prev = null; continue; } d += (prev ? 'L' : 'M') + x(p.t).toFixed(1) + ' ' + y(p.v).toFixed(1); prev = p; }
-    if (d) g += `<path d="${d}" fill="none" stroke="var(--surface)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/><path d="${d}" fill="none" stroke="var(--fg)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const d = pathFrom(trend, x, y);
+    if (d) g.push(`<path d="${d}" fill="none" stroke="var(--surface)" stroke-width="6" stroke-linejoin="round" stroke-linecap="round" opacity=".9"/><path d="${d}" fill="none" stroke="var(--fg)" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`);
     const end = [...trend].reverse().find(Boolean);
-    if (end) g += `<circle cx="${x(end.t).toFixed(1)}" cy="${y(end.v).toFixed(1)}" r="5" fill="var(--fg)" stroke="var(--surface)" stroke-width="2.5"/>`;
+    if (end && t1 >= today() - 1) g.push(`<circle cx="${x(end.t).toFixed(1)}" cy="${y(end.v).toFixed(1)}" r="5" fill="var(--fg)" stroke="var(--surface)" stroke-width="2.5"/>`);
   }
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${volIsTime() ? 'Running time' : 'Distance'} per week${smoothingOn() ? ' with smoothed volume trend' : ''}">${g}</svg>`;
+  g.push('</g>');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${volIsTime() ? 'Running time' : 'Distance'} per ${monthly ? 'month' : 'week'}${smoothingOn() ? ' with smoothed volume trend' : ''}">${g.join('')}</svg>`;
   $('#volTrendLegend').hidden = !smoothingOn();
-  $('#volBarsLegend').textContent = `${volIsTime() ? 'Time' : 'Distance'} each week`;
-
-  // Headline: smoothed volume now vs four weeks ago (or the plain last 7 days when smoothing is off).
+  $('#volBarsLegend').textContent = monthly ? `Average per week, by month` : `${volIsTime() ? 'Time' : 'Distance'} each week`;
+  renderVolumeHeadline();
+}
+function renderVolumeHeadline() {
+  const daily = dailyVolume(), cur = weekStart(today());
   const vNow = volumeAt(today(), daily), vThen = volumeAt(today() - 28, daily);
   $('#volLabel').textContent = smoothingOn() ? 'Volume trend' : 'Last 7 days';
   $('#volBig').innerHTML = vNow == null ? '–' : `${fmtVol(vNow)}<small>${volUnit()}/week</small>`;
   const vc = $('#volChange');
-  if (vNow == null || vThen == null) { vc.textContent = 'Needs about a month of runs to compare'; }
-  else if (vThen <= 0) { vc.textContent = vNow > 0 ? 'Up from nothing 4 weeks ago' : 'No running in the last weeks'; }
-  else {
-    const pct = Math.round((vNow / vThen - 1) * 100);
-    vc.textContent = Math.abs(pct) < 5 ? 'About the same as 4 weeks ago' : `${pct > 0 ? '▲ +' : '▼ '}${pct}% vs 4 weeks ago`;
-  }
-
-  // Load check: this calendar week against the three before it.
+  if (vNow == null || vThen == null) vc.textContent = 'Needs about a month of runs to compare';
+  else if (vThen <= 0) vc.textContent = vNow > 0 ? 'Up from nothing 4 weeks ago' : 'No running in the last weeks';
+  else { const pct = Math.round((vNow / vThen - 1) * 100); vc.textContent = Math.abs(pct) < 5 ? 'About the same as 4 weeks ago' : `${pct > 0 ? '▲ +' : '▼ '}${pct}% vs 4 weeks ago`; }
   const wkKm = weekly(), thisW = wkKm.get(cur) || 0, avg = [1, 2, 3].reduce((acc, i) => acc + (wkKm.get(cur - 7 * i) || 0), 0) / 3;
   const chip = $('#loadChip'), txt = $('#loadText');
   if (avg <= 0) { chip.className = 'chip flat'; chip.textContent = 'Building base'; txt.textContent = 'Once you have three weeks logged, spur compares each week with your recent average.'; }
@@ -312,10 +438,109 @@ function volumeChart(a) {
     const pct = Math.round((thisW / avg - 1) * 100);
     chip.className = 'chip warn'; chip.textContent = `+${pct}% vs 3-wk avg`;
     txt.textContent = `This week is ${pct}% above your recent average of ${toUnit(avg).toFixed(1)} ${uName()}. Big jumps in weekly distance are a common cause of running injuries, so build up gradually.`;
-  } else {
-    chip.className = 'chip good'; chip.textContent = 'Load steady';
-    txt.textContent = `${toUnit(thisW).toFixed(1)} ${uName()} so far this week, against a 3-week average of ${toUnit(avg).toFixed(1)} ${uName()}.`;
-  }
+  } else { chip.className = 'chip good'; chip.textContent = 'Load steady'; txt.textContent = `${toUnit(thisW).toFixed(1)} ${uName()} so far this week, against a 3-week average of ${toUnit(avg).toFixed(1)} ${uName()}.`; }
+}
+
+/* ---------- timeline navigator ---------- */
+function navChart() {
+  const el = $('#navChart'), ser = series();
+  if (ser.empty) return;
+  const { lo, hi } = bounds(), v = viewWindow();
+  const W = Math.max(280, el.clientWidth || 320), H = 54, P = { l: 42, r: 14 }, iw = W - P.l - P.r;
+  const x = (t) => P.l + ((t - lo) / Math.max(1, hi - lo)) * iw;
+  // Background: weekly distance over the whole history.
+  const wk = []; let mx = 1;
+  for (let w = weekStart(Math.floor(lo)); w <= hi; w += 7) { let s = 0; for (let d = 0; d < 7; d++) { const i = w + d - ser.D0; if (i >= 0 && i < ser.dailyKm.length) s += ser.dailyKm[i]; } wk.push([w, s]); mx = Math.max(mx, s); }
+  let area = `M${P.l} ${H - 6}`;
+  for (const [w, s] of wk) area += `L${x(w + 3.5).toFixed(1)} ${(H - 6 - (s / mx) * (H - 14)).toFixed(1)}`;
+  area += `L${(W - P.r).toFixed(1)} ${H - 6}Z`;
+  const xa = x(v.t0), xb = x(v.t1);
+  const g = [`<rect x="${P.l}" y="2" width="${iw}" height="${H - 6}" rx="8" fill="var(--surface-2)"/>`, `<path d="${area}" fill="var(--accent)" opacity=".35"/>`];
+  for (const [t, l] of timeTicks(lo, hi)) { const xx = x(t); if (xx > P.l + 10 && xx < W - P.r - 10) g.push(`<text x="${xx.toFixed(1)}" y="13" text-anchor="middle" style="font-size:10px">${esc(l)}</text>`); }
+  g.push(`<path d="M${P.l} 2H${xa.toFixed(1)}V${H - 4}H${P.l}Z M${xb.toFixed(1)} 2H${W - P.r}V${H - 4}H${xb.toFixed(1)}Z" fill="var(--bg)" opacity=".55"/>`);
+  g.push(`<rect class="nav-win" x="${xa.toFixed(1)}" y="2" width="${Math.max(4, xb - xa).toFixed(1)}" height="${H - 6}" rx="6" fill="none" stroke="var(--accent)" stroke-width="2"/>`);
+  for (const xx of [xa, xb]) g.push(`<rect x="${(xx - 3).toFixed(1)}" y="${H / 2 - 11}" width="6" height="18" rx="3" fill="var(--accent)"/>`);
+  el._geom = { W, l: P.l, iw, lo, hi };
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="slider" aria-label="Visible part of your running history" aria-valuetext="${esc($('#zoomLabel').textContent)}" tabindex="0">${g.join('')}</svg>`;
+}
+
+/* ---------- gestures: drag to pan, pinch / Ctrl+wheel / double-click to zoom ---------- */
+function plotOf(el) {
+  const g = el._geom, rect = el.getBoundingClientRect(), k = rect.width / (g?.W || rect.width);
+  return { left: rect.left + (g?.l || 0) * k, width: Math.max(1, (g?.iw || rect.width) * k) };
+}
+function bindChartGestures(el) {
+  const ptrs = new Map();
+  let start = null;
+  const snap = () => { const v = viewWindow(); start = { t0: v.t0, t1: v.t1, pts: new Map(ptrs) }; };
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    ptrs.set(e.pointerId, e.clientX); snap();
+    try { el.setPointerCapture(e.pointerId); } catch {}
+    el.classList.add('grabbing');
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!ptrs.has(e.pointerId) || !start) return;
+    ptrs.set(e.pointerId, e.clientX);
+    const p = plotOf(el), span = start.t1 - start.t0, ids = [...start.pts.keys()];
+    if (ptrs.size === 1 || ids.length < 2) {
+      const dx = e.clientX - start.pts.get(e.pointerId);
+      const shift = (-dx / p.width) * span;
+      setView(start.t0 + shift, start.t1 + shift);
+    } else {
+      const [a, b] = ids, a0 = start.pts.get(a), b0 = start.pts.get(b), a1 = ptrs.get(a), b1 = ptrs.get(b);
+      const d0 = Math.max(10, Math.abs(b0 - a0)), d1 = Math.max(10, Math.abs(b1 - a1));
+      const newSpan = (span * d0) / d1, c0 = (a0 + b0) / 2, c1 = (a1 + b1) / 2;
+      const anchor = start.t0 + ((c0 - p.left) / p.width) * span;
+      const nt0 = anchor - ((c1 - p.left) / p.width) * newSpan;
+      setView(nt0, nt0 + newSpan);
+    }
+  });
+  const end = (e) => { ptrs.delete(e.pointerId); if (ptrs.size) snap(); else { start = null; el.classList.remove('grabbing'); } };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', (e) => {
+    const p = plotOf(el), v = viewWindow(), span = v.t1 - v.t0;
+    if (e.ctrlKey || e.metaKey) { // trackpad pinch arrives as Ctrl + wheel
+      e.preventDefault();
+      zoomBy(Math.exp(e.deltaY * 0.01), v.t0 + ((e.clientX - p.left) / p.width) * span);
+    } else if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) {
+      e.preventDefault();
+      const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      setView(v.t0 + (dx / p.width) * span, v.t1 + (dx / p.width) * span);
+    }
+  }, { passive: false });
+  el.addEventListener('dblclick', (e) => { const p = plotOf(el), v = viewWindow(); zoomBy(0.5, v.t0 + ((e.clientX - p.left) / p.width) * (v.t1 - v.t0)); });
+}
+function bindNavigator(el) {
+  let mode = null, startX = 0, w0 = null;
+  const dayAt = (clientX) => { const g = el._geom, p = plotOf(el); return g.lo + ((clientX - p.left) / p.width) * (g.hi - g.lo); };
+  el.addEventListener('pointerdown', (e) => {
+    if (!el._geom) return;
+    const v = viewWindow(), p = plotOf(el), pxPerDay = p.width / (el._geom.hi - el._geom.lo);
+    const xa = p.left + (v.t0 - el._geom.lo) * pxPerDay, xb = p.left + (v.t1 - el._geom.lo) * pxPerDay;
+    if (Math.abs(e.clientX - xa) < 10) mode = 'a';
+    else if (Math.abs(e.clientX - xb) < 10) mode = 'b';
+    else if (e.clientX > xa && e.clientX < xb) mode = 'move';
+    else { const span = v.t1 - v.t0, c = dayAt(e.clientX); setView(c - span / 2, c + span / 2); mode = 'move'; }
+    startX = e.clientX; w0 = viewWindow();
+    try { el.setPointerCapture(e.pointerId); } catch {}
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (!mode) return;
+    const g = el._geom, p = plotOf(el), dd = ((e.clientX - startX) / p.width) * (g.hi - g.lo);
+    if (mode === 'move') setView(w0.t0 + dd, w0.t1 + dd);
+    else if (mode === 'a') setView(Math.min(w0.t0 + dd, w0.t1 - MIN_SPAN), w0.t1);
+    else setView(w0.t0, Math.max(w0.t1 + dd, w0.t0 + MIN_SPAN));
+  });
+  const stop = () => { mode = null; };
+  el.addEventListener('pointerup', stop); el.addEventListener('pointercancel', stop);
+  el.addEventListener('keydown', (e) => {
+    const v = viewWindow(), span = v.t1 - v.t0;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); setView(v.t0 - span / 4, v.t1 - span / 4); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); setView(v.t0 + span / 4, v.t1 + span / 4); }
+    if (e.key === '+' || e.key === '=') zoomBy(0.5);
+    if (e.key === '-') zoomBy(2);
+  });
 }
 
 /* ---------- views ---------- */
@@ -341,7 +566,6 @@ function renderOverview() {
       else { chip.className = 'chip warn'; chip.textContent = `▼ ${fmtMS(-faster)} /${uName()} slower than 30 days ago`; }
     }
   }
-  $$('#rangeSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === s.range));
   $$('#smoothSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === s.smoothing));
   $$('#volSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.v === s.volume));
   paceChart();
@@ -359,8 +583,13 @@ function renderOverview() {
     } else gt.innerHTML = `Goal ${goalTxt}, ${gap} to go. Your trend is not getting faster right now, so there is no forecast yet.`;
   }
   renderGoalMeter(a);
-  volumeChart(a);
+  volumeChart();
+  navChart();
+  zoomStatus();
   renderKpis();
+  renderCalendar();
+  renderRecords();
+  renderOvPredictions();
   const recent = sortRuns(state.runs, { key: 'date', dir: -1 }).slice(0, isWide() ? 8 : 5);
   $('#recent').innerHTML = isWide() ? runsTable(recent, { sortable: false, group: false }) : `<div class="list">${recent.map(rowButton).join('')}</div>`;
 }
@@ -386,15 +615,80 @@ function renderKpis() {
   const last28 = sumKm(state.runs.filter((r) => dn(r.date) > t - 28));
   const prev28 = sumKm(state.runs.filter((r) => { const d = dn(r.date); return d <= t - 28 && d > t - 56; }));
   const month = state.runs.filter((r) => r.date.startsWith(localToday().slice(0, 7)));
+  const year = state.runs.filter((r) => r.date.startsWith(localToday().slice(0, 4)));
+  const first = state.runs.reduce((m, r) => (r.date < m ? r.date : m), state.runs[0].date);
   const st = streak(wk);
   const d28 = prev28 > 0 ? Math.round((last28 / prev28 - 1) * 100) : null;
   const k = [
     ['This week', toUnit(thisW).toFixed(1), uName(), `${weekRuns} ${weekRuns === 1 ? 'run' : 'runs'} · last week ${toUnit(lastW).toFixed(1)} ${uName()}`],
     ['Last 4 weeks', toUnit(last28).toFixed(1), uName(), d28 == null ? 'Nothing earlier to compare with' : `${d28 >= 0 ? '+' : ''}${d28}% on the 4 weeks before`],
     ['This month', month.length, month.length === 1 ? 'run' : 'runs', `${fmtDist(sumKm(month))} ${uName()} so far`],
+    ['This year', fmtDist(sumKm(year)), uName(), `${year.length} ${year.length === 1 ? 'run' : 'runs'} in ${localToday().slice(0, 4)}`],
+    ['All time', fmtDist(sumKm(state.runs)), uName(), `${state.runs.length} runs since ${fd(dn(first), { month: 'short', year: 'numeric' })}`],
     ['Weekly streak', st, st === 1 ? 'week' : 'weeks', st ? 'Weeks in a row with a run' : 'Run this week to start one'],
   ];
   $('#kpis').innerHTML = k.map(([label, v, u, d]) => `<div class="kpi"><span class="k">${label}</span><span class="v num">${esc(v)}<small>${esc(u)}</small></span><span class="d num">${esc(d)}</span></div>`).join('');
+}
+
+/* ---------- activity calendar ---------- */
+function renderCalendar() {
+  const el = $('#calendar'), W = Math.max(280, el.clientWidth || 320);
+  const weeks = W < 560 ? 26 : 53, end = today(), startW = weekStart(end) - 7 * (weeks - 1);
+  const byDay = new Map();
+  for (const r of state.runs) { const d = dn(r.date); if (d >= startW && d <= end) { const e = byDay.get(d) || { km: 0, n: 0, id: r.id }; e.km += r.km; e.n++; byDay.set(d, e); } }
+  // Four shades, split at the quartiles of your own running days.
+  const kms = [...byDay.values()].map((e) => e.km).sort((a, b) => a - b);
+  const q = (f) => kms[Math.min(kms.length - 1, Math.floor(f * kms.length))] || 0;
+  const cuts = [q(0.25), q(0.5), q(0.75)];
+  const level = (km) => (km <= 0 ? 0 : km <= cuts[0] ? 1 : km <= cuts[1] ? 2 : km <= cuts[2] ? 3 : 4);
+  const left = 30, top = 16, gap = 3, cell = Math.max(6, Math.min(16, (W - left - gap * weeks) / weeks)), step = cell + gap;
+  const H = top + 7 * step;
+  const g = [];
+  ['Mon', 'Wed', 'Fri'].forEach((d, i) => g.push(`<text x="0" y="${top + (i * 2) * step + cell - 1}" style="font-size:10px">${d}</text>`));
+  let lastMonth = -1;
+  for (let w = 0; w < weeks; w++) {
+    const ws = startW + 7 * w, m = dayToMonth(ws + 6);
+    if (m !== lastMonth && w < weeks - 1) { g.push(`<text x="${left + w * step}" y="10" style="font-size:10px">${esc(fd(ws + 6, { month: 'short' }))}</text>`); lastMonth = m; }
+    for (let d = 0; d < 7; d++) {
+      const day = ws + d; if (day > end) continue;
+      const e = byDay.get(day), lv = e ? level(e.km) : 0;
+      const tip = `${fd(day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}: ${e ? `${fmtDist(e.km)} ${uName()}${e.n > 1 ? ` (${e.n} runs)` : ''}` : 'rest day'}`;
+      g.push(`<rect class="c l${lv}" x="${left + w * step}" y="${top + d * step}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" rx="${Math.min(3, cell / 4).toFixed(1)}"${e ? ` data-id="${esc(e.id)}"` : ''}><title>${esc(tip)}</title></rect>`);
+    }
+  }
+  el.innerHTML = `<svg viewBox="0 0 ${left + weeks * step} ${H}" role="img" aria-label="Running days over the last ${weeks === 53 ? '12 months' : '6 months'}">${g.join('')}</svg>`;
+  const total = [...byDay.values()].reduce((a, e) => a + e.km, 0), runs = [...byDay.values()].reduce((a, e) => a + e.n, 0);
+  $('#calSummary').textContent = `${fmtDist(total)} ${uName()} · ${runs} runs · ${byDay.size} running days`;
+  el.closest('.card').querySelector('h3').textContent = weeks === 53 ? 'Last 12 months' : 'Last 6 months';
+}
+const dayToMonth = (d) => { const x = new Date(d * DAY); return x.getUTCFullYear() * 12 + x.getUTCMonth(); };
+
+/* ---------- personal records + predictions ---------- */
+function renderRecords() {
+  const runs = state.runs;
+  const best = (list, f, better) => list.reduce((b, r) => (b == null || better(f(r), f(b)) ? r : b), null);
+  const longest = best(runs, (r) => r.km, (a, b) => a > b);
+  const longTime = best(runs, (r) => r.sec, (a, b) => a > b);
+  const fast5 = best(runs.filter((r) => r.km >= 5), (r) => r.sec / r.km, (a, b) => a < b);
+  const fast10 = best(runs.filter((r) => r.km >= 10), (r) => r.sec / r.km, (a, b) => a < b);
+  const wk = weekly(); let bw = null; for (const [w, km] of wk) if (!bw || km > bw[1]) bw = [w, km];
+  const mo = new Map(); for (const r of runs) { const k = r.date.slice(0, 7); mo.set(k, (mo.get(k) || 0) + r.km); }
+  let bm = null; for (const [k, km] of mo) if (!bm || km > bm[1]) bm = [k, km];
+  const when = (r) => fd(dn(r.date), { day: 'numeric', month: 'short', year: 'numeric' });
+  const rows = [
+    longest && ['Longest run', `${fmtDist(longest.km)} ${uName()}`, when(longest), longest.id],
+    longTime && ['Longest time', fmtDur(longTime.sec), when(longTime), longTime.id],
+    fast5 && ['Fastest 5 km+', `${fmtMS(paceU(fast5.sec / fast5.km))} /${uName()}`, `${fmtDist(fast5.km)} ${uName()} · ${when(fast5)}`, fast5.id],
+    fast10 && ['Fastest 10 km+', `${fmtMS(paceU(fast10.sec / fast10.km))} /${uName()}`, `${fmtDist(fast10.km)} ${uName()} · ${when(fast10)}`, fast10.id],
+    bw && ['Biggest week', `${fmtDist(bw[1])} ${uName()}`, `week of ${fd(bw[0], { day: 'numeric', month: 'short', year: 'numeric' })}`, null],
+    bm && ['Biggest month', `${fmtDist(bm[1])} ${uName()}`, fd(dn(bm[0] + '-01'), { month: 'long', year: 'numeric' }), null],
+  ].filter(Boolean);
+  $('#records').innerHTML = rows.map(([k, v, d, id]) => `<div class="rec"${id ? ` data-id="${esc(id)}" role="button" tabindex="0"` : ''}><span class="rk">${k}</span><span class="rv num">${esc(v)}</span><span class="rd num">${esc(d)}</span></div>`).join('');
+}
+function renderOvPredictions() {
+  const R = riegel(), el = $('#ovPred');
+  if (!R) { el.innerHTML = '<p class="muted small" style="margin:0">Log a run of 3 km or more to get race-time estimates.</p>'; return; }
+  el.innerHTML = [['5K', 5], ['10K', 10], ['Half', 21.0975], ['Marathon', 42.195]].map(([n, D]) => { const t = R.at(D); return `<div class="rec"><span class="rk">${n}</span><span class="rv num">${fmtDur(t)}</span><span class="rd num">${fmtMS(paceU(t / D))} /${uName()}</span></div>`; }).join('');
 }
 
 /* ---------- run lists and tables ---------- */
@@ -769,7 +1063,15 @@ $('#goalSheet').addEventListener('submit', (e) => {
 });
 
 /* ---------- settings ---------- */
-$('#rangeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) saveSettings({ range: b.dataset.v }); });
+$('#rangeSeg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { state.view = null; saveSettings({ range: b.dataset.v }); } });
+$('#zoomIn').addEventListener('click', () => zoomBy(0.5));
+$('#zoomOut').addEventListener('click', () => zoomBy(2));
+$('#zoomReset').addEventListener('click', () => { state.view = null; drawTrends(); });
+bindChartGestures($('#paceChart')); bindChartGestures($('#volChart')); bindNavigator($('#navChart'));
+['#records', '#calendar'].forEach((sel) => {
+  $(sel).addEventListener('click', (e) => { const el = e.target.closest('[data-id]'); if (el) openRunFrom(el); });
+  $(sel).addEventListener('keydown', (e) => { const el = e.target.closest('[data-id]'); if (el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openRunFrom(el); } });
+});
 const segBind = (sel, key) => $(sel).addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) saveSettings({ [key]: b.dataset.v }); });
 segBind('#unitSeg', 'unit'); segBind('#metricSeg', 'metric'); segBind('#modeSeg', 'mode');
 segBind('#smoothSeg', 'smoothing'); segBind('#smoothSetSeg', 'smoothing'); segBind('#volSeg', 'volume');
@@ -825,7 +1127,7 @@ window.addEventListener('resize', () => {
   rz = setTimeout(() => {
     if (!state.user) return;
     if (isWide() !== wasWide) { wasWide = isWide(); render(); }
-    else if (currentTab() === 'overview' && state.runs.length) { paceChart(); volumeChart(analysis()); }
+    else if (currentTab() === 'overview' && state.runs.length) { drawTrends(); renderCalendar(); }
   }, 120);
 });
 
