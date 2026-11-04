@@ -1,13 +1,11 @@
-# DRAFT build recipe for F-Droid (https://gitlab.com/fdroid/fdroiddata).
-# Before submitting: tag a release (v1.0.0), set the exact Flutter version you
-# build with, then open a merge request to fdroiddata as
-# metadata/io.github.dabaneghassan.spur.yml. The packagers may adjust the steps.
 Categories:
   - Sports & Health
 License: GPL-3.0-or-later
 AuthorName: Ghassan Dabane
+WebSite: https://dabane-ghassan.github.io/spur/
 SourceCode: https://github.com/dabane-ghassan/spur
 IssueTracker: https://github.com/dabane-ghassan/spur/issues
+Changelog: https://github.com/dabane-ghassan/spur/releases
 Donate: https://buymeacoffee.com/ghassandabane
 
 AutoName: spur
@@ -16,33 +14,16 @@ RepoType: git
 Repo: https://github.com/dabane-ghassan/spur.git
 
 Builds:
-  - versionName: 1.0.0
-    versionCode: 1
-    commit: v1.0.0
+  - versionName: 1.0.2
+    versionCode: 3
+    commit: v1.0.2
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
-      - flutter@3.32.0   # replace with the exact Flutter release you test with
+      - flutter@FLUTTER_VERSION
+    rm:
+      - selfhost
+      - site
     prebuild:
-      - $$flutter$$/bin/flutter create --org io.github.dabaneghassan --project-name spur --platforms android .
-      - sed -i -e '/signingConfig =/d' android/app/build.gradle.kts
-      - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter config --no-analytics
-      - $$flutter$$/bin/flutter pub get
-    scandelete:
-      - .pub-cache
-    build:
-      - export PUB_CACHE=$(pwd)/.pub-cache
-      - $$flutter$$/bin/flutter build apk --release
-
-  - versionName: 1.0.1
-    versionCode: 2
-    commit: v1.0.1
-    output: build/app/outputs/flutter-apk/app-release.apk
-    srclibs:
-      - flutter@3.32.0   # replace with the exact Flutter release you test with
-    prebuild:
-      - $$flutter$$/bin/flutter create --org io.github.dabaneghassan --project-name spur --platforms android .
-      - sed -i -e '/signingConfig =/d' android/app/build.gradle.kts
       - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get
@@ -55,5 +36,5 @@ Builds:
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
 UpdateCheckData: pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
-CurrentVersion: 1.0.1
-CurrentVersionCode: 2
+CurrentVersion: 1.0.2
+CurrentVersionCode: 3

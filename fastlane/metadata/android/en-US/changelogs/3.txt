@@ -1,0 +1,3 @@
+• Ready for F-Droid: every Android build file is now in the source code, and the app carries no Google dependency metadata
+• New store screenshots taken from the app itself
+• No changes to how the app works
