@@ -18,7 +18,8 @@ Log the distance and time after each run. spur smooths out the good days and the
 ## Installation
 
 <p>
-  <a href="https://github.com/dabane-ghassan/spur/releases/latest"><img alt="Download the APK" src="https://img.shields.io/badge/Download-APK-c4492f?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://github.com/dabane-ghassan/spur/releases/latest/download/spur.apk"><img alt="Download the latest APK" src="https://img.shields.io/badge/Download-APK-c4492f?style=for-the-badge&logo=android&logoColor=white"></a>
+  <a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.github.dabaneghassan.spur%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fdabane-ghassan%2Fspur%22%2C%22author%22%3A%22Ghassan%20Dabane%22%2C%22name%22%3A%22spur%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Espur-v.%2B%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D"><img alt="Get it on Obtainium" src="site/img/obtainium.png" height="28"></a>
   <img alt="F-Droid: coming soon" src="https://img.shields.io/badge/F--Droid-coming_soon-lightgrey?style=for-the-badge&logo=fdroid&logoColor=white">
   <a href="selfhost/README.md"><img alt="Self-host with Docker" src="https://img.shields.io/badge/Self--host-Docker-2c77b8?style=for-the-badge&logo=docker&logoColor=white"></a>
 </p>
