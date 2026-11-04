@@ -1,0 +1,17 @@
+ M analysis_options.yaml
+?? .metadata
+?? android/.gitignore
+?? android/app/build.gradle.kts
+?? android/app/src/debug/AndroidManifest.xml
+?? android/app/src/main/res/drawable-v21/launch_background.xml
+?? android/app/src/main/res/drawable/launch_background.xml
+?? android/app/src/main/res/values-night/styles.xml
+?? android/app/src/main/res/values/styles.xml
+?? android/app/src/profile/AndroidManifest.xml
+?? android/build.gradle.kts
+?? android/gradle.properties
+?? android/gradle/wrapper/gradle-wrapper.properties
+?? android/settings.gradle.kts
+?? pubspec.lock
+?? tool/flutter-create-files.txt
+?? tool/flutter-version.json
