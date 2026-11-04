@@ -55,8 +55,10 @@ ThemeData buildTheme(String paletteId, Brightness brightness) {
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     ),
+    // Explicit colours: a label style without one made chip text white in light mode.
     chipTheme: base.chipTheme.copyWith(
-      labelStyle: const TextStyle(fontFamily: kBodyFont, fontWeight: FontWeight.w600),
+      labelStyle: TextStyle(fontFamily: kBodyFont, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant),
+      secondaryLabelStyle: TextStyle(fontFamily: kBodyFont, fontWeight: FontWeight.w600, color: scheme.onSecondaryContainer),
     ),
   );
 }

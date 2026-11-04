@@ -12,6 +12,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show debugDisableShadows;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -55,6 +56,8 @@ Future<RunStore> _store({ThemeMode mode = ThemeMode.light}) async {
 
 void main() {
   setUpAll(() async {
+    // flutter_test draws shadows as solid black outlines unless told otherwise.
+    debugDisableShadows = false;
     await _font('Barlow', ['assets/fonts/Barlow-Regular.ttf', 'assets/fonts/Barlow-SemiBold.ttf']);
     await _font('BarlowCondensed', [
       'assets/fonts/BarlowCondensed-Bold.ttf',

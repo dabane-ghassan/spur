@@ -317,7 +317,14 @@ class _PacePainter extends CustomPainter {
       _text(canvas, format(v), Offset(l - 6, yy), labelStyle, align: TextAlign.right, vCenter: true);
     }
     _drawTimeAxis(canvas, size, t0, t1, x, l, r, b, gridPaint, labelStyle);
-    _text(canvas, 'FASTER ↑', Offset(l + 4, 0), labelStyle.copyWith(fontSize: 10, letterSpacing: 0.8));
+    // A drawn triangle rather than an arrow character, which not every font has.
+    final up = Path()
+      ..moveTo(l + 4, 9)
+      ..lineTo(l + 8.5, 1.5)
+      ..lineTo(l + 13, 9)
+      ..close();
+    canvas.drawPath(up, Paint()..color = labelStyle.color ?? grid);
+    _text(canvas, 'FASTER', Offset(l + 17, 0), labelStyle.copyWith(fontSize: 10, letterSpacing: 0.8));
 
     if (goal != null) {
       final gy = y(goal!);

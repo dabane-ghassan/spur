@@ -430,13 +430,15 @@ class _VolumeCard extends StatelessWidget {
     final now = analysis.volumeAt(analysis.today, daily);
     final then = analysis.volumeAt(analysis.today - 28, daily);
     final String change;
+    IconData? changeIcon;
     if (now == null || then == null) {
       change = 'Needs about a month of runs to compare';
     } else if (then <= 0) {
       change = now > 0 ? 'Up from nothing 4 weeks ago' : 'No running in the last weeks';
     } else {
       final pct = ((now / then - 1) * 100).round();
-      change = pct.abs() < 5 ? 'About the same as 4 weeks ago' : '${pct > 0 ? '▲ +' : '▼ '}$pct% vs 4 weeks ago';
+      change = pct.abs() < 5 ? 'About the same as 4 weeks ago' : '${pct > 0 ? '+' : ''}$pct% vs 4 weeks ago';
+      if (pct.abs() >= 5) changeIcon = pct > 0 ? Icons.arrow_upward : Icons.arrow_downward;
     }
 
     // Load check: this calendar week against the three before it (always in distance).
@@ -491,7 +493,7 @@ class _VolumeCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Wrap(spacing: 6, runSpacing: 6, children: [StatusPill(change), loadPill]),
+            Wrap(spacing: 6, runSpacing: 6, children: [StatusPill(change, icon: changeIcon), loadPill]),
             const SizedBox(height: 12),
             ZoomGestures(
               window: window,
