@@ -58,7 +58,7 @@ Accounts, HTTPS with Caddy, backups and the full API are described in [selfhost/
 
 ## Building
 
-The APK is built by [GitHub Actions](.github/workflows/android.yml) on every push. To build it yourself, or to sign and release it, see [BUILDING.md](BUILDING.md).
+The APK is built by [GitHub Actions](.github/workflows/android.yml) whenever the app changes. To build it yourself, or to sign and release it, see [BUILDING.md](BUILDING.md).
 
 ## FAQ
 

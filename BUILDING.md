@@ -38,8 +38,12 @@ The app ID is `io.github.dabaneghassan.spur`. It must match the package of
 
 ## Continuous builds
 
-`.github/workflows/android.yml` builds on every push to `main` and publishes the APK to the
-[Latest test build](https://github.com/dabane-ghassan/spur/releases/tag/latest-build) pre-release.
+`.github/workflows/android.yml` builds whenever the Android app changes on `main` (`lib/`, `android/`,
+`assets/`, `test/`, `pubspec.*`, `fastlane/` or the workflow itself) and publishes
+`spur-test-build.apk` to the [Latest test build](https://github.com/dabane-ghassan/spur/releases/tag/latest-build)
+pre-release. Changes to `site/`, `selfhost/`, docs or other workflows don't rebuild the app.
+`spur.apk` is only ever attached to real releases, so
+<https://github.com/dabane-ghassan/spur/releases/latest/download/spur.apk> always gives the newest one.
 If a build fails, the full log is pushed to the `ci-log` branch.
 
 ### Signing
