@@ -30,3 +30,6 @@ android/key.properties
 .idea/
 .vscode/
 .DS_Store
+
+# Rendered by tool/screenshots; copies live in fastlane/
+tool/screenshots/out/
