@@ -143,7 +143,19 @@ test('CSV import skips bad lines and duplicates, export matches the Android form
 
 test('creating accounts on the sign-in page is on by default', () => {
   assert.equal(loadConfig({}).allowSignup, true);
-  assert.equal(loadConfig({ SPUR_ALLOW_SIGNUP: 'false' }).allowSignup, false);
+  assert.equal(loadConfig({ SPUR_DISABLE_SIGNUP: 'true' }).allowSignup, false);
+  // An .env copied from the 1.0.0 example says SPUR_ALLOW_SIGNUP=false; it must not hide sign-up any more.
+  assert.equal(loadConfig({ SPUR_ALLOW_SIGNUP: 'false' }).allowSignup, true);
+});
+
+test('usernames can be email addresses, but not contain spaces', async () => {
+  config.allowSignup = true;
+  const v = client();
+  assert.equal((await v('POST', '/api/signup', { username: 'ghassan dabane', password: PW })).status, 400);
+  const r = await v('POST', '/api/signup', { username: 'runner+1@example.org', password: PW });
+  assert.equal(r.status, 201);
+  assert.equal((await client()('POST', '/api/login', { username: 'Runner+1@Example.org', password: PW })).status, 200, 'case does not matter');
+  config.allowSignup = false;
 });
 
 test('status tells the sign-in page the truth once the first account exists', async () => {

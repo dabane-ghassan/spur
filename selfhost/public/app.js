@@ -946,7 +946,8 @@ function paintAuth() {
   $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
   $('#authNote').textContent = first
     ? 'This is the first account on this server. Choose a password of at least 10 characters.'
-    : signup ? 'Pick a username and a password of at least 10 characters. Your runs are only visible to you.'
+    : signup ? 'Pick a username (no spaces; an email address works) and a password of at least 10 characters. Your runs are only visible to you.'
+    : st.allowSignup === false ? 'Creating new accounts is turned off on this server.'
     : 'Your runs are stored on this server only.';
   $('#authSwitchWrap').hidden = first || !st.allowSignup;
   $('#authSwitchText').textContent = state.signupMode ? 'Already have an account?' : 'New here?';
