@@ -8,14 +8,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { MAX_ACCOUNTS, createServer, loadConfig } from '../src/server.js';
+import { createServer, loadConfig } from '../src/server.js';
 import { openDb } from '../src/db.js';
 import { parseCsv, sampleRuns, toCsv } from '../src/runs.js';
 
-let server, base;
+let server, base, config;
 
 before(async () => {
-  const config = { ...loadConfig({}), dbFile: ':memory:', allowSignup: false };
+  config = { ...loadConfig({}), dbFile: ':memory:', allowSignup: false };
   server = createServer(config, openDb(':memory:'));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
@@ -64,7 +64,7 @@ test('first account signs up and gets a session', async () => {
   assert.equal(me.data.user.username, 'alice');
 });
 
-test('further sign-ups are closed by default', async () => {
+test('creating accounts can be turned off', async () => {
   const r = await bob('POST', '/api/signup', { username: 'bob', password: PW });
   assert.equal(r.status, 403);
 });
@@ -141,98 +141,72 @@ test('CSV import skips bad lines and duplicates, export matches the Android form
   assert.equal(out.data, 'date,distance_km,duration\n2026-10-28,8.20,42:31\n2026-10-30,5.00,26:05\n');
 });
 
-test('the first account is the admin', async () => {
-  assert.equal((await alice('GET', '/api/me')).data.user.isAdmin, true);
+test('creating accounts on the sign-in page is on by default', () => {
+  assert.equal(loadConfig({}).allowSignup, true);
+  assert.equal(loadConfig({ SPUR_ALLOW_SIGNUP: 'false' }).allowSignup, false);
 });
 
-test('admins add accounts, which can sign in but not manage others', async () => {
-  const weak = await alice('POST', '/api/admin/users', { username: 'bob', password: 'short' });
-  assert.equal(weak.status, 400);
-  const r = await alice('POST', '/api/admin/users', { username: 'bob', password: PW });
+test('status tells the sign-in page the truth once the first account exists', async () => {
+  // 1.0.1 bug: the page kept the "server is empty" answer and offered a sign-up that then failed.
+  const visitor = client();
+  config.allowSignup = false;
+  assert.equal((await visitor('GET', '/api/status')).data.allowSignup, false);
+  config.allowSignup = true;
+  assert.equal((await visitor('GET', '/api/status')).data.allowSignup, true);
+  const r = await visitor('POST', '/api/signup', { username: 'lina', password: PW });
   assert.equal(r.status, 201);
-  assert.deepEqual(r.data.users.map((u) => [u.username, u.isAdmin]), [['alice', true], ['bob', false]]);
-  assert.equal(r.data.users[0].runs, 2, 'admins see how many runs, never the runs themselves');
-  assert.equal((await alice('POST', '/api/admin/users', { username: 'BOB', password: PW })).status, 409);
-
-  assert.equal((await bob('POST', '/api/login', { username: 'bob', password: PW })).status, 200);
-  assert.equal((await bob('GET', '/api/me')).data.user.isAdmin, false);
-  assert.equal((await bob('GET', '/api/admin')).status, 403);
-  assert.equal((await bob('POST', '/api/admin/users', { username: 'mallory', password: PW })).status, 403);
+  assert.equal((await visitor('GET', '/api/runs')).data.runs.length, 0, 'a new account starts empty');
+  assert.equal((await visitor('POST', '/api/signup', { username: 'LINA', password: PW })).status, 409);
+  config.allowSignup = false;
 });
 
-test('one browser stays signed in to several accounts and switches between them', async () => {
-  const both = client();
-  await both('POST', '/api/login', { username: 'alice', password: PW });
-  const add = await both('POST', '/api/login', { username: 'bob', password: PW });
-  assert.equal(add.data.user.username, 'bob', 'the account just added becomes the active one');
-  let acc = (await both('GET', '/api/accounts')).data.accounts;
-  assert.deepEqual(acc.map((a) => [a.username, a.active]), [['bob', true], ['alice', false]]);
-  assert.equal((await both('GET', '/api/runs')).data.runs.length, 0, "bob's diary");
-
-  const sw = await both('POST', '/api/accounts/switch', { username: 'ALICE' });
-  assert.equal(sw.data.user.username, 'alice');
-  assert.equal((await both('GET', '/api/runs')).data.runs.length, 2, "alice's diary");
-  assert.equal((await both('POST', '/api/accounts/switch', { username: 'carol' })).status, 404);
-
-  const again = await both('POST', '/api/login', { username: 'bob', password: PW });
-  assert.equal(again.status, 200);
-  acc = (await both('GET', '/api/accounts')).data.accounts;
-  assert.equal(acc.length, 2, 'signing in again does not list an account twice');
-
-  const out = await both('POST', '/api/logout', {});
-  assert.equal(out.data.user.username, 'alice', 'signing out of one account moves to the next');
-  assert.deepEqual((await both('GET', '/api/accounts')).data.accounts.map((a) => a.username), ['alice']);
-  assert.equal((await both('GET', '/api/me')).data.user.username, 'alice');
-
-  await both('POST', '/api/login', { username: 'bob', password: PW });
-  const all = await both('POST', '/api/logout', { all: true });
-  assert.equal(all.data.user, null);
-  assert.equal((await both('GET', '/api/me')).status, 401);
-  assert.equal(MAX_ACCOUNTS >= 2, true);
+test('one account per browser: signing in replaces the previous session', async () => {
+  const b = client();
+  const first = await b('POST', '/api/login', { username: 'alice', password: PW });
+  const aliceCookie = first.headers.get('set-cookie').split(';')[0];
+  await b('POST', '/api/login', { username: 'lina', password: PW });
+  assert.equal((await b('GET', '/api/me')).data.user.username, 'lina');
+  const old = await fetch(base + '/api/me', { headers: { Cookie: aliceCookie } });
+  assert.equal(old.status, 401, "alice's session in that browser ended");
+  await b('POST', '/api/logout', {});
+  assert.equal((await b('GET', '/api/me')).status, 401, 'signing out signs out');
+  assert.equal((await alice('GET', '/api/me')).status, 200, "alice's other browser is untouched");
 });
 
-test('admins open and close sign-ups from the app', async () => {
-  const carol = client();
-  const open = await alice('PUT', '/api/admin/signup', { allow: true });
-  assert.equal(open.data.allowSignup, true);
-  assert.equal((await carol('GET', '/api/status')).data.allowSignup, true);
-  const r = await carol('POST', '/api/signup', { username: 'carol', password: PW });
-  assert.equal(r.status, 201);
-  assert.equal(r.data.user.isAdmin, false);
-  await alice('PUT', '/api/admin/signup', { allow: false });
-  assert.equal((await client()('POST', '/api/signup', { username: 'dave', password: PW })).status, 403);
-
-  // An admin resets carol's password: her sessions end.
-  const reset = await alice('PUT', '/api/admin/users/carol', { password: 'a fresh long password' });
-  assert.equal(reset.status, 200);
-  assert.equal((await carol('GET', '/api/me')).status, 401);
-
-  assert.equal((await alice('PUT', '/api/admin/users/alice', { admin: false })).status, 400, 'no locking yourself out');
-  const promote = await alice('PUT', '/api/admin/users/bob', { admin: true });
-  assert.equal(promote.data.users.find((u) => u.username === 'bob').isAdmin, true);
-  await alice('PUT', '/api/admin/users/bob', { admin: false });
-
-  assert.equal((await alice('DELETE', '/api/admin/users/alice')).status, 400);
-  assert.equal((await alice('DELETE', '/api/admin/users/nobody')).status, 404);
-  const del = await alice('DELETE', '/api/admin/users/carol');
-  assert.deepEqual(del.data.users.map((u) => u.username), ['alice', 'bob']);
+test('cookies from 1.0.1 holding several sessions still work, and are cleaned up', async () => {
+  const b = client();
+  const t1 = (await b('POST', '/api/login', { username: 'alice', password: PW })).headers.get('set-cookie').split(';')[0].split('=')[1];
+  const c = client();
+  const t2 = (await c('POST', '/api/login', { username: 'lina', password: PW })).headers.get('set-cookie').split(';')[0].split('=')[1];
+  const both = `spur_session=${t2}.${t1}`;
+  const me = await fetch(base + '/api/me', { headers: { Cookie: both } });
+  assert.equal((await me.json()).user.username, 'lina', 'the first token is the account');
+  await fetch(base + '/api/logout', { method: 'POST', headers: { Cookie: both, 'X-Spur': '1' } });
+  for (const t of [t1, t2]) assert.equal((await fetch(base + '/api/me', { headers: { Cookie: `spur_session=${t}` } })).status, 401);
 });
 
-test('older databases get an admin, and an admin is never missing', () => {
+test('the admin endpoints of 1.0.1 are gone', async () => {
+  assert.equal((await alice('GET', '/api/admin')).status, 404);
+  assert.equal((await alice('GET', '/api/accounts')).status, 404);
+});
+
+test('databases from 1.0.0 and 1.0.1 open and keep their accounts', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spur-'));
-  const file = path.join(dir, 'old.db');
-  const old = new DatabaseSync(file);
-  old.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, pw_hash TEXT NOT NULL,
-      settings TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
-    INSERT INTO meta VALUES ('schema_version', '1');
-    INSERT INTO users (username, pw_hash, created_at) VALUES ('first', 'x', '2026-01-01'), ('second', 'x', '2026-02-01');`);
-  old.close();
-  const store = openDb(file);
-  assert.deepEqual(store.users().map((u) => [u.username, u.isAdmin]), [['first', true], ['second', false]]);
-  store.deleteUser(store.userByName('first').id);
-  assert.equal(store.users()[0].isAdmin, true, 'the next account takes over');
-  store.close();
+  for (const [name, extra] of [['v100', ''], ['v101', ', is_admin INTEGER NOT NULL DEFAULT 0']]) {
+    const file = path.join(dir, `${name}.db`);
+    const old = new DatabaseSync(file);
+    old.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, pw_hash TEXT NOT NULL,
+        settings TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL${extra});
+      INSERT INTO meta VALUES ('schema_version', '${name === 'v100' ? 1 : 2}'), ('allow_signup', '0');
+      INSERT INTO users (username, pw_hash, created_at) VALUES ('first', 'x', '2026-01-01');`);
+    old.close();
+    const store = openDb(file);
+    store.createUser('second', 'y');
+    assert.deepEqual(store.users().map((u) => u.username), ['first', 'second'], name);
+    assert.equal(store.db.prepare("SELECT value FROM meta WHERE key = 'allow_signup'").get(), undefined, 'the old in-app switch is gone');
+    store.close();
+  }
   fs.rmSync(dir, { recursive: true });
 });
 

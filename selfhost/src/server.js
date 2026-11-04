@@ -17,9 +17,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = path.join(ROOT, 'public');
 const VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
 const COOKIE = 'spur_session';
-/** How many accounts one browser can stay signed in to at once. */
-export const MAX_ACCOUNTS = 6;
-const USERNAME = /^[A-Za-z0-9._-]{2,32}$/;
 
 export function loadConfig(env = process.env) {
   const bool = (v, d) => (v == null || v === '' ? d : /^(1|true|yes|on)$/i.test(String(v)));
@@ -28,7 +25,8 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 4219),
     host: env.HOST || '0.0.0.0',
     dbFile: env.SPUR_DB || path.join(dataDir, 'spur.db'),
-    allowSignup: bool(env.SPUR_ALLOW_SIGNUP, false),
+    // Whether the sign-in page offers "Create an account". On by default.
+    allowSignup: bool(env.SPUR_ALLOW_SIGNUP, true),
     trustProxy: bool(env.SPUR_TRUST_PROXY, false),
     cookieSecure: String(env.SPUR_COOKIE_SECURE || 'auto').toLowerCase(),
     sessionDays: Math.max(1, Number(env.SPUR_SESSION_DAYS || 90)),
@@ -135,67 +133,37 @@ export function createServer(config, store = openDb(config.dbFile)) {
       req.on('error', reject);
     });
 
-  // One browser can be signed in to several accounts. The session cookie holds
-  // their tokens joined by dots, the active account first. Only hashes of the
-  // tokens are stored on the server.
+  // One account per browser. The cookie holds a random token; the server only
+  // stores its hash. (1.0.1 cookies could hold several tokens joined by dots:
+  // they are all ended on the next sign-in or sign-out.)
   const cookieTokens = (req) =>
     String(cookies(req)[COOKIE] || '')
       .split('.')
       .filter((t) => /^[A-Za-z0-9_-]{20,64}$/.test(t))
-      .slice(0, MAX_ACCOUNTS);
+      .slice(0, 8);
 
-  /** The browser's live sessions, active first, one per account. */
-  const signedIn = (req) => {
-    if (req.spurSessions) return req.spurSessions;
-    const out = [], seen = new Set();
-    for (const token of cookieTokens(req)) {
-      const user = store.sessionUser(hashToken(token));
-      if (user && !seen.has(user.id)) {
-        seen.add(user.id);
-        out.push({ token, user });
-      }
-    }
-    return (req.spurSessions = out);
-  };
-
-  const writeSessions = (req, res, tokens) => {
+  const startSession = (req, res, userId) => {
+    for (const t of cookieTokens(req)) store.deleteSession(hashToken(t));
+    const token = newToken();
     const maxAge = config.sessionDays * 86400;
+    store.createSession(hashToken(token), userId, Date.now() + maxAge * 1000);
     res.setHeader(
       'Set-Cookie',
-      tokens.length
-        ? `${COOKIE}=${tokens.join('.')}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie(req) ? '; Secure' : ''}`
-        : `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie(req) ? '; Secure' : ''}`,
     );
+    return token;
   };
 
-  /** Signs userId in and makes it the active account, keeping the other accounts signed in. */
-  const startSession = (req, res, userId) => {
-    const token = newToken();
-    store.createSession(hashToken(token), userId, Date.now() + config.sessionDays * 86400 * 1000);
-    const others = [];
-    for (const s of signedIn(req)) {
-      if (s.user.id === userId || others.length >= MAX_ACCOUNTS - 1) store.deleteSession(hashToken(s.token));
-      else others.push(s.token);
-    }
-    writeSessions(req, res, [token, ...others]);
+  const endSession = (req, res) => {
+    for (const t of cookieTokens(req)) store.deleteSession(hashToken(t));
+    res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
   };
 
-  /** Signs out the active account (or all of them); returns who is active afterwards. */
-  const endSession = (req, res, { all = false } = {}) => {
-    const live = signedIn(req);
-    const gone = all ? live : live.slice(0, 1);
-    for (const s of gone) store.deleteSession(hashToken(s.token));
-    for (const t of cookieTokens(req)) if (!live.some((s) => s.token === t)) store.deleteSession(hashToken(t));
-    const rest = all ? [] : live.slice(1);
-    writeSessions(req, res, rest.map((s) => s.token));
-    return rest[0]?.user ?? null;
-  };
+  const sessionToken = (req) => cookieTokens(req)[0] || null;
 
-  const sessionUser = (req) => signedIn(req)[0]?.user ?? null;
-
-  const signupAllowed = () => {
-    const v = store.meta('allow_signup');
-    return v == null ? config.allowSignup : v === '1';
+  const sessionUser = (req) => {
+    const token = sessionToken(req);
+    return token ? store.sessionUser(hashToken(token)) : null;
   };
 
   const settingsOf = (user) => {
@@ -206,28 +174,7 @@ export function createServer(config, store = openDb(config.dbFile)) {
     }
   };
 
-  const me = (user) => ({ user: { username: user.username, isAdmin: !!user.is_admin }, settings: settingsOf(user) });
-
-  const accountsOf = (req) =>
-    signedIn(req).map((s, i) => ({ username: s.user.username, name: settingsOf(s.user).name || '', active: i === 0 }));
-
-  const adminView = () => ({
-    allowSignup: signupAllowed(),
-    signupFromEnv: store.meta('allow_signup') == null,
-    users: store.users().map((u) => {
-      let name = '';
-      try { name = JSON.parse(u.settings || '{}').name || ''; } catch {}
-      return { username: u.username, name, isAdmin: u.isAdmin, createdAt: u.createdAt, runs: u.runs, lastRun: u.lastRun };
-    }),
-  });
-
-  const targetUser = (raw) => {
-    let name;
-    try { name = decodeURIComponent(raw); } catch { name = ''; }
-    const u = USERNAME.test(name) ? store.userByName(name) : null;
-    if (!u) throw new HttpError(404, 'There is no account with that username.');
-    return u;
-  };
+  const me = (user) => ({ user: { username: user.username }, settings: settingsOf(user) });
 
   // -------------------------------------------------------------------------
 
@@ -255,23 +202,21 @@ export function createServer(config, store = openDb(config.dbFile)) {
       return send(res, 200, {
         version: VERSION,
         needsSetup: count === 0,
-        allowSignup: count === 0 || signupAllowed(),
+        allowSignup: count === 0 || config.allowSignup,
         user: user ? { username: user.username } : null,
-        accounts: accountsOf(req).length,
-        maxAccounts: MAX_ACCOUNTS,
       });
     }
 
     if (route === 'POST /api/signup') {
       const first = store.userCount() === 0;
-      if (!first && !signupAllowed()) throw new HttpError(403, 'New accounts are turned off on this server. Ask its admin to add you.');
+      if (!first && !config.allowSignup) throw new HttpError(403, 'Creating accounts is turned off on this server.');
       const wait = loginLimiter.hit(clientIp(req));
       if (wait) throw new HttpError(429, `Too many attempts. Try again in ${Math.ceil(wait / 60)} minutes.`);
       const { username, password } = await readJson(req);
       const problem = checkCredentials(username, password);
       if (problem) throw new HttpError(400, problem);
       if (store.userByName(username)) throw new HttpError(409, 'That username is taken.');
-      const id = store.createUser(username, await hashPassword(password), { admin: first });
+      const id = store.createUser(username, await hashPassword(password));
       startSession(req, res, id);
       return send(res, 201, me(store.userById(id)));
     }
@@ -292,21 +237,8 @@ export function createServer(config, store = openDb(config.dbFile)) {
     }
 
     if (route === 'POST /api/logout') {
-      const { all } = await readJson(req);
-      const next = endSession(req, res, { all: all === true });
-      return send(res, 200, next ? { ok: true, ...me(next) } : { ok: true, user: null });
-    }
-
-    if (route === 'GET /api/accounts') return send(res, 200, { accounts: accountsOf(req), maxAccounts: MAX_ACCOUNTS });
-
-    if (route === 'POST /api/accounts/switch') {
-      const { username } = await readJson(req);
-      const live = signedIn(req);
-      const i = live.findIndex((s) => typeof username === 'string' && s.user.username.toLowerCase() === username.toLowerCase());
-      if (i < 0) throw new HttpError(404, 'That account is not signed in here. Sign in to it first.');
-      const order = [live[i], ...live.filter((_, j) => j !== i)];
-      writeSessions(req, res, order.map((s) => s.token));
-      return send(res, 200, me(live[i].user));
+      endSession(req, res);
+      return send(res, 200, { ok: true });
     }
 
     // Everything below needs a signed-in user.
@@ -332,7 +264,7 @@ export function createServer(config, store = openDb(config.dbFile)) {
       const problem = checkCredentials(user.username, next);
       if (problem) throw new HttpError(400, problem);
       store.setPassword(uid, await hashPassword(next));
-      store.deleteOtherSessions(uid, hashToken(signedIn(req)[0].token));
+      store.deleteOtherSessions(uid, hashToken(sessionToken(req)));
       return send(res, 200, { ok: true });
     }
 
@@ -341,58 +273,9 @@ export function createServer(config, store = openDb(config.dbFile)) {
       if (typeof password !== 'string' || !(await verifyPassword(password, user.pw_hash))) {
         throw new HttpError(400, 'That password is not right.');
       }
-      const next = endSession(req, res);
+      endSession(req, res);
       store.deleteUser(uid);
-      return send(res, 200, next ? { ok: true, ...me(store.userById(next.id)) } : { ok: true, user: null });
-    }
-
-    // ----- account management, for admins -----
-    if (p === '/api/admin' || p.startsWith('/api/admin/')) {
-      if (!user.is_admin) throw new HttpError(403, 'Only an admin of this server can manage accounts.');
-
-      if (route === 'GET /api/admin') return send(res, 200, adminView());
-
-      if (route === 'PUT /api/admin/signup') {
-        const { allow } = await readJson(req);
-        if (typeof allow !== 'boolean') throw new HttpError(400, 'Say whether new accounts are allowed.');
-        store.setMeta('allow_signup', allow ? '1' : '0');
-        return send(res, 200, adminView());
-      }
-
-      if (route === 'POST /api/admin/users') {
-        const { username, password, admin } = await readJson(req);
-        const problem = checkCredentials(username, password);
-        if (problem) throw new HttpError(400, problem);
-        if (store.userByName(username)) throw new HttpError(409, 'That username is taken.');
-        store.createUser(username, await hashPassword(password), { admin: admin === true });
-        return send(res, 201, adminView());
-      }
-
-      const m = p.match(/^\/api\/admin\/users\/([^/]+)$/);
-      if (m && method === 'PUT') {
-        const target = targetUser(m[1]);
-        const { password, admin } = await readJson(req);
-        if (password !== undefined) {
-          const problem = checkCredentials(target.username, password);
-          if (problem) throw new HttpError(400, problem);
-          store.setPassword(target.id, await hashPassword(password));
-          if (target.id !== uid) store.deleteUserSessions(target.id);
-          else store.deleteOtherSessions(uid, hashToken(signedIn(req)[0].token));
-        }
-        if (admin !== undefined) {
-          if (typeof admin !== 'boolean') throw new HttpError(400, 'Say whether the account is an admin.');
-          if (target.id === uid) throw new HttpError(400, "You can't change your own admin rights. Ask another admin.");
-          store.setAdmin(target.id, admin);
-        }
-        return send(res, 200, adminView());
-      }
-      if (m && method === 'DELETE') {
-        const target = targetUser(m[1]);
-        if (target.id === uid) throw new HttpError(400, 'To delete your own account, use Delete account under Account.');
-        store.deleteUser(target.id);
-        return send(res, 200, adminView());
-      }
-      throw new HttpError(404, 'Not found.');
+      return send(res, 200, { ok: true });
     }
 
     if (route === 'GET /api/runs') return send(res, 200, { runs: store.runs(uid) });
@@ -530,9 +413,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   server.listen(config.port, config.host, () => {
     console.log(`spur ${VERSION} listening on http://${config.host}:${config.port}`);
     console.log(`database: ${config.dbFile}`);
-    const stored = server.store.meta('allow_signup');
-    const open = stored == null ? config.allowSignup : stored === '1';
-    console.log(`new accounts: ${open ? 'anyone can sign up' : 'added by an admin'}${stored == null ? '' : ' (set in the app)'}`);
+    console.log(`create account on the sign-in page: ${config.allowSignup ? 'on' : 'off (SPUR_ALLOW_SIGNUP=false)'}`);
   });
   const stop = () => {
     console.log('shutting down');

@@ -4,7 +4,6 @@
 // Admin commands, run inside the container:
 //   docker compose exec spur npm run reset-password -- <username>
 //   docker compose exec spur node src/cli.js list-users
-//   docker compose exec spur node src/cli.js make-admin <username>
 //   docker compose exec spur node src/cli.js backup
 
 import crypto from 'node:crypto';
@@ -31,18 +30,9 @@ try {
       console.log(`New password for ${user.username}: ${password}`);
       console.log('Sign in with it, then change it in Settings.');
     }
-  } else if (cmd === 'make-admin' && arg) {
-    const user = store.userByName(arg);
-    if (!user) {
-      console.error(`No user called "${arg}".`);
-      process.exitCode = 1;
-    } else {
-      store.setAdmin(user.id, true);
-      console.log(`${user.username} is now an admin. They can manage accounts in Settings.`);
-    }
   } else if (cmd === 'list-users') {
     for (const u of store.users()) {
-      console.log(`${u.username}${u.isAdmin ? ' (admin)' : ''}\t${u.runs} runs\tcreated ${u.createdAt.slice(0, 10)}`);
+      console.log(`${u.username}\t${u.runs} runs\tcreated ${u.createdAt.slice(0, 10)}`);
     }
   } else if (cmd === 'backup') {
     // A consistent copy of the live database, safe to take while spur runs.
@@ -51,7 +41,7 @@ try {
     store.db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
     console.log(`Backup written to ${file}`);
   } else {
-    console.log('Usage:\n  node src/cli.js reset-password <username>\n  node src/cli.js make-admin <username>\n  node src/cli.js list-users\n  node src/cli.js backup [file]');
+    console.log('Usage:\n  node src/cli.js reset-password <username>\n  node src/cli.js list-users\n  node src/cli.js backup [file]');
     process.exitCode = cmd ? 1 : 0;
   }
 } finally {
