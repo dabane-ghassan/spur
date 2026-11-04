@@ -4,7 +4,8 @@ The full spur running diary as a web app you run on your own server, NAS or Rasp
 
 - **No third-party packages.** The server uses only what ships with Node.js (HTTP, crypto and its built-in SQLite). Nothing to `npm install`, nothing to keep patched beyond the Node image.
 - **Private by design.** Runs live in one SQLite file on your server. No analytics, no external requests, no CDN: fonts and icons are served locally.
-- **Accounts.** The first visitor creates the first account. Optionally let family or friends create their own; each account only ever sees its own runs.
+- **Accounts for the whole household.** The first visitor creates the first account and becomes the server's admin. Admins add people, reset passwords and open or close sign-ups from Settings. Each account only ever sees its own runs; admins see names and run counts, never anyone's runs.
+- **Several accounts in one browser.** Stay signed in to up to six accounts and switch from the account menu at the bottom of the sidebar (or Settings on a phone), without typing passwords again.
 - **Same CSV format as the Android app**, so you can move runs between them.
 
 ## Quick start
@@ -46,7 +47,7 @@ All optional, in `.env`:
 | Setting | Default | What it does |
 |---|---|---|
 | `SPUR_PORT` | `4219` | Port on the host |
-| `SPUR_ALLOW_SIGNUP` | `false` | Let people other than the first user create accounts |
+| `SPUR_ALLOW_SIGNUP` | `false` | Let anyone create an account from the sign-in page. Once an admin changes this in Settings, the app's choice wins |
 | `SPUR_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers. Only behind a reverse proxy |
 | `SPUR_COOKIE_SECURE` | `auto` | Secure cookies: `auto`, `true` or `false` |
 | `SPUR_SESSION_DAYS` | `90` | How long a sign-in lasts |
@@ -56,8 +57,9 @@ All optional, in `.env`:
 ## Admin commands
 
 ```sh
-docker compose exec spur node src/cli.js list-users
+docker compose exec spur node src/cli.js list-users                  # with admins and run counts
 docker compose exec spur node src/cli.js reset-password <username>   # prints a new password
+docker compose exec spur node src/cli.js make-admin <username>       # if you lose access to every admin account
 docker compose exec spur node src/cli.js backup                      # writes /data/spur-backup-<time>.db
 ```
 
@@ -97,7 +99,10 @@ JSON over HTTPS, cookie-authenticated. Changes need the header `X-Spur: 1`.
 | Method & path | Purpose |
 |---|---|
 | `GET /api/status` | Server version, whether setup or sign-up is open, current user |
-| `POST /api/signup`, `/api/login`, `/api/logout` | Accounts and sessions |
+| `POST /api/signup`, `/api/login`, `/api/logout` | Accounts and sessions. Signing in adds the account to the browser's signed-in accounts; `logout` signs out the active one (`{all: true}`: every one) |
+| `GET /api/accounts`, `POST /api/accounts/switch` (`{username}`) | The accounts signed in on this browser, and switching between them |
+| `GET /api/admin`, `PUT /api/admin/signup` (`{allow}`) | Admins: everyone's name and run count, and whether anyone can sign up |
+| `POST /api/admin/users`, `PUT` / `DELETE /api/admin/users/:username` | Admins: add an account, set its password or admin rights, remove it |
 | `GET /api/me`, `PUT /api/settings` | Current user and display settings |
 | `POST /api/password`, `DELETE /api/account` | Change password, delete account |
 | `GET /api/runs`, `POST /api/runs` | List and add runs (`{date, km, sec}`) |

@@ -11,4 +11,4 @@ const String kDonateUrl = 'https://buymeacoffee.com/ghassandabane';
 const String kSourceUrl = 'https://github.com/dabane-ghassan/spur';
 
 /// Keep in step with `version:` in pubspec.yaml.
-const String kAppVersion = '1.0.0';
+const String kAppVersion = '1.0.1';
