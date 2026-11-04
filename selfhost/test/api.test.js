@@ -3,8 +3,12 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
-import { createServer, loadConfig } from '../src/server.js';
+import { MAX_ACCOUNTS, createServer, loadConfig } from '../src/server.js';
 import { openDb } from '../src/db.js';
 import { parseCsv, sampleRuns, toCsv } from '../src/runs.js';
 
@@ -135,6 +139,101 @@ test('CSV import skips bad lines and duplicates, export matches the Android form
   const out = await alice('GET', '/api/export.csv');
   assert.match(out.headers.get('content-disposition'), /attachment; filename="spur-runs-/);
   assert.equal(out.data, 'date,distance_km,duration\n2026-10-28,8.20,42:31\n2026-10-30,5.00,26:05\n');
+});
+
+test('the first account is the admin', async () => {
+  assert.equal((await alice('GET', '/api/me')).data.user.isAdmin, true);
+});
+
+test('admins add accounts, which can sign in but not manage others', async () => {
+  const weak = await alice('POST', '/api/admin/users', { username: 'bob', password: 'short' });
+  assert.equal(weak.status, 400);
+  const r = await alice('POST', '/api/admin/users', { username: 'bob', password: PW });
+  assert.equal(r.status, 201);
+  assert.deepEqual(r.data.users.map((u) => [u.username, u.isAdmin]), [['alice', true], ['bob', false]]);
+  assert.equal(r.data.users[0].runs, 2, 'admins see how many runs, never the runs themselves');
+  assert.equal((await alice('POST', '/api/admin/users', { username: 'BOB', password: PW })).status, 409);
+
+  assert.equal((await bob('POST', '/api/login', { username: 'bob', password: PW })).status, 200);
+  assert.equal((await bob('GET', '/api/me')).data.user.isAdmin, false);
+  assert.equal((await bob('GET', '/api/admin')).status, 403);
+  assert.equal((await bob('POST', '/api/admin/users', { username: 'mallory', password: PW })).status, 403);
+});
+
+test('one browser stays signed in to several accounts and switches between them', async () => {
+  const both = client();
+  await both('POST', '/api/login', { username: 'alice', password: PW });
+  const add = await both('POST', '/api/login', { username: 'bob', password: PW });
+  assert.equal(add.data.user.username, 'bob', 'the account just added becomes the active one');
+  let acc = (await both('GET', '/api/accounts')).data.accounts;
+  assert.deepEqual(acc.map((a) => [a.username, a.active]), [['bob', true], ['alice', false]]);
+  assert.equal((await both('GET', '/api/runs')).data.runs.length, 0, "bob's diary");
+
+  const sw = await both('POST', '/api/accounts/switch', { username: 'ALICE' });
+  assert.equal(sw.data.user.username, 'alice');
+  assert.equal((await both('GET', '/api/runs')).data.runs.length, 2, "alice's diary");
+  assert.equal((await both('POST', '/api/accounts/switch', { username: 'carol' })).status, 404);
+
+  const again = await both('POST', '/api/login', { username: 'bob', password: PW });
+  assert.equal(again.status, 200);
+  acc = (await both('GET', '/api/accounts')).data.accounts;
+  assert.equal(acc.length, 2, 'signing in again does not list an account twice');
+
+  const out = await both('POST', '/api/logout', {});
+  assert.equal(out.data.user.username, 'alice', 'signing out of one account moves to the next');
+  assert.deepEqual((await both('GET', '/api/accounts')).data.accounts.map((a) => a.username), ['alice']);
+  assert.equal((await both('GET', '/api/me')).data.user.username, 'alice');
+
+  await both('POST', '/api/login', { username: 'bob', password: PW });
+  const all = await both('POST', '/api/logout', { all: true });
+  assert.equal(all.data.user, null);
+  assert.equal((await both('GET', '/api/me')).status, 401);
+  assert.equal(MAX_ACCOUNTS >= 2, true);
+});
+
+test('admins open and close sign-ups from the app', async () => {
+  const carol = client();
+  const open = await alice('PUT', '/api/admin/signup', { allow: true });
+  assert.equal(open.data.allowSignup, true);
+  assert.equal((await carol('GET', '/api/status')).data.allowSignup, true);
+  const r = await carol('POST', '/api/signup', { username: 'carol', password: PW });
+  assert.equal(r.status, 201);
+  assert.equal(r.data.user.isAdmin, false);
+  await alice('PUT', '/api/admin/signup', { allow: false });
+  assert.equal((await client()('POST', '/api/signup', { username: 'dave', password: PW })).status, 403);
+
+  // An admin resets carol's password: her sessions end.
+  const reset = await alice('PUT', '/api/admin/users/carol', { password: 'a fresh long password' });
+  assert.equal(reset.status, 200);
+  assert.equal((await carol('GET', '/api/me')).status, 401);
+
+  assert.equal((await alice('PUT', '/api/admin/users/alice', { admin: false })).status, 400, 'no locking yourself out');
+  const promote = await alice('PUT', '/api/admin/users/bob', { admin: true });
+  assert.equal(promote.data.users.find((u) => u.username === 'bob').isAdmin, true);
+  await alice('PUT', '/api/admin/users/bob', { admin: false });
+
+  assert.equal((await alice('DELETE', '/api/admin/users/alice')).status, 400);
+  assert.equal((await alice('DELETE', '/api/admin/users/nobody')).status, 404);
+  const del = await alice('DELETE', '/api/admin/users/carol');
+  assert.deepEqual(del.data.users.map((u) => u.username), ['alice', 'bob']);
+});
+
+test('older databases get an admin, and an admin is never missing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'spur-'));
+  const file = path.join(dir, 'old.db');
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE, pw_hash TEXT NOT NULL,
+      settings TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL);
+    INSERT INTO meta VALUES ('schema_version', '1');
+    INSERT INTO users (username, pw_hash, created_at) VALUES ('first', 'x', '2026-01-01'), ('second', 'x', '2026-02-01');`);
+  old.close();
+  const store = openDb(file);
+  assert.deepEqual(store.users().map((u) => [u.username, u.isAdmin]), [['first', true], ['second', false]]);
+  store.deleteUser(store.userByName('first').id);
+  assert.equal(store.users()[0].isAdmin, true, 'the next account takes over');
+  store.close();
+  fs.rmSync(dir, { recursive: true });
 });
 
 test('wrong passwords are refused, then rate-limited', async () => {

@@ -18,6 +18,7 @@ const SCHEMA = `
     username   TEXT NOT NULL UNIQUE COLLATE NOCASE,
     pw_hash    TEXT NOT NULL,
     settings   TEXT NOT NULL DEFAULT '{}',
+    is_admin   INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS sessions (
@@ -44,8 +45,22 @@ export function openDb(file) {
   db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   if (file !== ':memory:') db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrate(db);
+  const store = new Store(db);
+  store.ensureAdmin();
+  return store;
+}
+
+/** Brings databases made by older versions up to date. */
+function migrate(db) {
   db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1')").run();
-  return new Store(db);
+  const version = Number(db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get().value);
+  if (version < 2) {
+    // 1.0.1: accounts can be admins, who manage the other accounts.
+    const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
+    if (!cols.includes('is_admin')) db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+    db.prepare("UPDATE meta SET value = '2' WHERE key = 'schema_version'").run();
+  }
 }
 
 const now = () => new Date().toISOString();
@@ -60,7 +75,17 @@ export class Store {
       userCount: q('SELECT COUNT(*) AS n FROM users'),
       userByName: q('SELECT * FROM users WHERE username = ?'),
       userById: q('SELECT * FROM users WHERE id = ?'),
-      insertUser: q('INSERT INTO users (username, pw_hash, created_at) VALUES (?, ?, ?)'),
+      insertUser: q('INSERT INTO users (username, pw_hash, is_admin, created_at) VALUES (?, ?, ?, ?)'),
+      setAdmin: q('UPDATE users SET is_admin = ? WHERE id = ?'),
+      adminCount: q('SELECT COUNT(*) AS n FROM users WHERE is_admin = 1'),
+      firstUser: q('SELECT id FROM users ORDER BY id LIMIT 1'),
+      userList: q(`SELECT u.id, u.username, u.settings, u.is_admin, u.created_at,
+                          COUNT(r.id) AS runs, MAX(r.date) AS last_run
+                     FROM users u LEFT JOIN runs r ON r.user_id = u.id AND r.sample = 0
+                    GROUP BY u.id ORDER BY u.username COLLATE NOCASE`),
+      getMeta: q('SELECT value FROM meta WHERE key = ?'),
+      setMeta: q('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'),
+      deleteMeta: q('DELETE FROM meta WHERE key = ?'),
       setPassword: q('UPDATE users SET pw_hash = ? WHERE id = ?'),
       setSettings: q('UPDATE users SET settings = ? WHERE id = ?'),
       deleteUser: q('DELETE FROM users WHERE id = ?'),
@@ -105,10 +130,31 @@ export class Store {
   userCount() { return Number(this.q.userCount.get().n); }
   userByName(name) { return this.q.userByName.get(name); }
   userById(id) { return this.q.userById.get(id); }
-  createUser(name, pwHash) { return Number(this.q.insertUser.run(name, pwHash, now()).lastInsertRowid); }
+  createUser(name, pwHash, { admin = false } = {}) {
+    return Number(this.q.insertUser.run(name, pwHash, admin ? 1 : 0, now()).lastInsertRowid);
+  }
+  setAdmin(id, admin) { this.q.setAdmin.run(admin ? 1 : 0, id); }
+  adminCount() { return Number(this.q.adminCount.get().n); }
+  /** Every server with accounts has at least one admin: the oldest account, unless another is already one. */
+  ensureAdmin() {
+    if (this.userCount() > 0 && this.adminCount() === 0) this.setAdmin(this.q.firstUser.get().id, true);
+  }
+  users() {
+    return this.q.userList.all().map((u) => ({
+      id: u.id, username: u.username, settings: u.settings, isAdmin: !!u.is_admin,
+      createdAt: u.created_at, runs: Number(u.runs), lastRun: u.last_run ?? null,
+    }));
+  }
+
+  // server-wide settings
+  meta(key) { return this.q.getMeta.get(key)?.value ?? null; }
+  setMeta(key, value) { if (value == null) this.q.deleteMeta.run(key); else this.q.setMeta.run(key, String(value)); }
   setPassword(id, pwHash) { this.q.setPassword.run(pwHash, id); }
   setSettings(id, settings) { this.q.setSettings.run(JSON.stringify(settings), id); }
-  deleteUser(id) { this.q.deleteUser.run(id); }
+  deleteUser(id) {
+    this.q.deleteUser.run(id);
+    this.ensureAdmin();
+  }
 
   // sessions
   createSession(tokenHash, userId, expiresAt) { this.q.insertSession.run(tokenHash, userId, expiresAt); }
