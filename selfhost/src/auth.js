@@ -35,8 +35,8 @@ export const newToken = () => crypto.randomBytes(32).toString('base64url');
 export const hashToken = (t) => crypto.createHash('sha256').update(t).digest('base64url');
 
 export function checkCredentials(username, password) {
-  if (typeof username !== 'string' || !/^[A-Za-z0-9._-]{2,32}$/.test(username)) {
-    return 'Usernames are 2 to 32 characters: letters, numbers, dots, dashes or underscores.';
+  if (typeof username !== 'string' || !/^[A-Za-z0-9._@+-]{2,64}$/.test(username)) {
+    return 'Use 2 to 64 letters or numbers for your username, without spaces (an email address works too).';
   }
   if (typeof password !== 'string' || password.length < 10) return 'Use a password of at least 10 characters.';
   if (password.length > 200) return 'That password is too long.';

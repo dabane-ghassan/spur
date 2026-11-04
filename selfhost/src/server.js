@@ -25,8 +25,11 @@ export function loadConfig(env = process.env) {
     port: Number(env.PORT || 4219),
     host: env.HOST || '0.0.0.0',
     dbFile: env.SPUR_DB || path.join(dataDir, 'spur.db'),
-    // Whether the sign-in page offers "Create an account". On by default.
-    allowSignup: bool(env.SPUR_ALLOW_SIGNUP, true),
+    // "Create an account" on the sign-in page: on unless SPUR_DISABLE_SIGNUP=true.
+    // SPUR_ALLOW_SIGNUP (1.0.x) is no longer read: .env files copied from the old
+    // example set it to false, which silently hid account creation after upgrading.
+    allowSignup: !bool(env.SPUR_DISABLE_SIGNUP, false),
+    oldSignupSetting: env.SPUR_ALLOW_SIGNUP != null && env.SPUR_ALLOW_SIGNUP !== '',
     trustProxy: bool(env.SPUR_TRUST_PROXY, false),
     cookieSecure: String(env.SPUR_COOKIE_SECURE || 'auto').toLowerCase(),
     sessionDays: Math.max(1, Number(env.SPUR_SESSION_DAYS || 90)),
@@ -217,6 +220,7 @@ export function createServer(config, store = openDb(config.dbFile)) {
       if (problem) throw new HttpError(400, problem);
       if (store.userByName(username)) throw new HttpError(409, 'That username is taken.');
       const id = store.createUser(username, await hashPassword(password));
+      loginLimiter.clear(clientIp(req));
       startSession(req, res, id);
       return send(res, 201, me(store.userById(id)));
     }
@@ -413,7 +417,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   server.listen(config.port, config.host, () => {
     console.log(`spur ${VERSION} listening on http://${config.host}:${config.port}`);
     console.log(`database: ${config.dbFile}`);
-    console.log(`create account on the sign-in page: ${config.allowSignup ? 'on' : 'off (SPUR_ALLOW_SIGNUP=false)'}`);
+    console.log(`create account on the sign-in page: ${config.allowSignup ? 'on' : 'off (SPUR_DISABLE_SIGNUP=true)'}`);
+    if (config.oldSignupSetting) console.log('note: SPUR_ALLOW_SIGNUP is no longer used. To turn account creation off, set SPUR_DISABLE_SIGNUP=true.');
   });
   const stop = () => {
     console.log('shutting down');

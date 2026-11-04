@@ -4,7 +4,7 @@ The full spur running diary as a web app you run on your own server, NAS or Rasp
 
 - **No third-party packages.** The server uses only what ships with Node.js (HTTP, crypto and its built-in SQLite). Nothing to `npm install`, nothing to keep patched beyond the Node image.
 - **Private by design.** Runs live in one SQLite file on your server. No analytics, no external requests, no CDN: fonts and icons are served locally.
-- **Simple accounts.** The first visitor creates the first account. After that, the sign-in page offers "Create an account" so family or friends can make their own; turn that off with `SPUR_ALLOW_SIGNUP=false`. Each account only ever sees its own runs.
+- **Simple accounts.** The first visitor creates the first account. After that, the sign-in page offers "Create an account" so family or friends can make their own; turn that off with `SPUR_DISABLE_SIGNUP=true`. Each account only ever sees its own runs.
 - **Same CSV format as the Android app**, so you can move runs between them.
 
 ## Quick start
@@ -46,7 +46,7 @@ All optional, in `.env`:
 | Setting | Default | What it does |
 |---|---|---|
 | `SPUR_PORT` | `4219` | Port on the host |
-| `SPUR_ALLOW_SIGNUP` | `true` | Show "Create an account" on the sign-in page. Set to `false` once everyone who should have an account has one |
+| `SPUR_DISABLE_SIGNUP` | `false` | Set to `true` to hide "Create an account" on the sign-in page, e.g. once everyone has an account. (Replaces `SPUR_ALLOW_SIGNUP` from 1.0.x, which is no longer read.) |
 | `SPUR_TRUST_PROXY` | `false` | Trust `X-Forwarded-*` headers. Only behind a reverse proxy |
 | `SPUR_COOKIE_SECURE` | `auto` | Secure cookies: `auto`, `true` or `false` |
 | `SPUR_SESSION_DAYS` | `90` | How long a sign-in lasts |
