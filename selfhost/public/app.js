@@ -590,7 +590,7 @@ function renderOverview() {
   renderCalendar();
   renderRecords();
   renderOvPredictions();
-  const recent = sortRuns(state.runs, { key: 'date', dir: -1 }).slice(0, isWide() ? 8 : 5);
+  const recent = sortRuns(state.runs, { key: 'date', dir: -1 }).slice(0, isWide() ? 6 : 5); // six rows sit level with the six records
   $('#recent').innerHTML = isWide() ? runsTable(recent, { sortable: false, group: false }) : `<div class="list">${recent.map(rowButton).join('')}</div>`;
 }
 function renderGoalMeter(a) {
@@ -686,9 +686,13 @@ function renderRecords() {
   $('#records').innerHTML = rows.map(([k, v, d, id]) => `<div class="rec"${id ? ` data-id="${esc(id)}" role="button" tabindex="0"` : ''}><span class="rk">${k}</span><span class="rv num">${esc(v)}</span><span class="rd num">${esc(d)}</span></div>`).join('');
 }
 function renderOvPredictions() {
-  const R = riegel(), el = $('#ovPred');
-  if (!R) { el.innerHTML = '<p class="muted small" style="margin:0">Log a run of 3 km or more to get race-time estimates.</p>'; return; }
-  el.innerHTML = [['5K', 5], ['10K', 10], ['Half', 21.0975], ['Marathon', 42.195]].map(([n, D]) => { const t = R.at(D); return `<div class="rec"><span class="rk">${n}</span><span class="rv num">${fmtDur(t)}</span><span class="rd num">${fmtMS(paceU(t / D))} /${uName()}</span></div>`; }).join('');
+  const R = riegel(), el = $('#ovPred'), note = $('#ovPredNote');
+  if (!R) { note.textContent = ''; el.innerHTML = '<p class="muted small" style="margin:0;grid-column:1/-1">Log a run of 3 km or more to get race-time estimates.</p>'; return; }
+  note.textContent = `· from ${fmtDist(R.base.km)} ${uName()} in ${fmtDur(R.base.sec)} on ${fd(dn(R.base.date), { day: 'numeric', month: 'short' })}`;
+  el.innerHTML = [['5K', 5], ['10K', 10], ['Half marathon', 21.0975], ['Marathon', 42.195]].map(([n, D]) => {
+    const t = R.at(D);
+    return `<div class="race"><span class="race-name">${n}</span><span class="race-time num">${fmtDur(t)}</span><span class="race-pace num">${fmtMS(paceU(t / D))} /${uName()}</span><i class="race-bar" aria-hidden="true"><b style="--w:${((D / 42.195) * 100).toFixed(1)}%"></b></i></div>`;
+  }).join('');
 }
 
 /* ---------- run lists and tables ---------- */

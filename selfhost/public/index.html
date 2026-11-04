@@ -133,33 +133,31 @@
           <p class="hint">Drag the charts or the highlighted window to move through time. Pinch, Ctrl + scroll, double-click or use − / + to zoom.</p>
         </div>
 
-        <div class="ov-main">
-          <div class="card ov-cal">
+        <div class="card ov-cal">
             <div class="head"><h3>Last 12 months</h3><span class="muted small num" id="calSummary" style="margin-left:auto"></span></div>
             <div class="cal" id="calendar"></div>
             <div class="cal-legend small muted"><span>Less</span><i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i><span>More</span></div>
           </div>
-          <div class="card ov-recent">
-          <div class="head"><h3>Recent runs</h3><a class="btn ghost" href="#runs" style="margin-left:auto">All runs →</a></div>
-          <div id="recent"></div>
-        </div>
-        </div>
 
-        <div class="ov-side">
         <div class="card ov-goal">
           <div class="head"><h3>Pace goal</h3><button class="btn ghost" id="editGoal" type="button" style="margin-left:auto">Set goal</button></div>
           <div class="goal-meter" id="goalMeter" hidden></div>
           <p class="muted small" id="goalText" style="margin:0"></p>
         </div>
 
-          <div class="card ov-records">
+        <div class="card ov-recent">
+          <div class="head"><h3>Recent runs</h3><a class="btn ghost" href="#runs" style="margin-left:auto">All runs →</a></div>
+          <div id="recent"></div>
+        </div>
+
+        <div class="card ov-records">
             <div class="head"><h3>Personal records</h3></div>
             <div class="records" id="records"></div>
           </div>
-          <div class="card ov-pred">
-            <div class="head"><h3>Race predictions</h3><a class="btn ghost" href="#stats" style="margin-left:auto">Stats →</a></div>
-            <div class="records" id="ovPred"></div>
-          </div>
+
+        <div class="card ov-pred">
+          <div class="head"><h3>Race predictions</h3><span class="muted small" id="ovPredNote"></span><a class="btn ghost" href="#stats" style="margin-left:auto">Stats →</a></div>
+          <div class="race-strip" id="ovPred"></div>
         </div>
       </div>
     </section>
