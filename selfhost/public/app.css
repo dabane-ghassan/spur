@@ -62,6 +62,7 @@ button{cursor:pointer}
 
 .view{display:flex;flex-direction:column;gap:14px}
 h2{font-family:var(--f-display);font-weight:700;font-size:15px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:6px 2px 0;text-wrap:balance}
+.avatar{width:40px;height:40px;flex:none;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:20px;line-height:1;text-transform:uppercase}
 .card{background:var(--surface);border-radius:20px;padding:16px;box-shadow:var(--shadow);min-width:0}
 .card h3{margin:0;font-size:15px;font-weight:600}
 .card .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
@@ -287,16 +288,24 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .sw-bars em{font-style:normal;font-size:11px;font-weight:600;color:var(--muted);line-height:1}
   .sw-bars .today em{color:var(--fg);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;text-decoration-color:var(--accent)}
   .side-week .sw-cmp{font-size:12.5px;color:var(--muted);margin-top:2px}
-  /* Profile footer */
-  .side-foot{display:flex;align-items:center;gap:4px;border-top:1px solid var(--line);margin:0 -4px;padding:14px 4px 0}
-  .side-user{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:6px;border-radius:12px;color:inherit;text-decoration:none}
-  .side-user:hover{background:var(--surface-2)}
-  .side-who{min-width:0;display:grid}
+  /* Profile footer: opens the account menu */
+  .side-foot{position:relative;border-top:1px solid var(--line);margin:0 -4px;padding:14px 4px 0}
+  .side-user{width:100%;display:flex;align-items:center;gap:11px;padding:6px 8px 6px 6px;border:0;border-radius:12px;background:none;color:inherit;text-align:left;cursor:pointer}
+  .side-user:hover,.side-user[aria-expanded="true"]{background:var(--surface-2)}
+  .side-user .updown{flex:none;margin-left:auto;color:var(--muted)}
+  .side-who{min-width:0;flex:1;display:grid}
   .side-who b{font-weight:700;font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .side-who span{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .side-out{flex:none;width:38px;height:38px;display:grid;place-items:center;border:0;border-radius:12px;background:none;color:var(--muted);cursor:pointer}
-  .side-out:hover{background:var(--surface-2);color:var(--fg)}
-  .side-out:focus-visible,.side-user:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .side-user:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .acct-menu{position:absolute;left:0;right:0;bottom:calc(100% + 8px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 32px rgb(0 0 0 / .16),var(--shadow);padding:6px;display:grid;gap:2px;max-height:min(70vh,560px);overflow:auto}
+  .acct-menu .menu-k{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;font-weight:600;color:var(--muted);padding:8px 10px 4px}
+  .acct-menu hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+  .acct-menu button,.acct-menu a{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:0;border-radius:10px;background:none;color:inherit;text-decoration:none;font:inherit;font-size:14.5px;font-weight:600;text-align:left;cursor:pointer}
+  .acct-menu button:hover,.acct-menu a:hover,.acct-menu button:focus-visible,.acct-menu a:focus-visible{background:var(--surface-2);outline:none}
+  .acct-menu [role=menuitem] svg{flex:none;color:var(--muted)}
+  .acct-menu .acct-row svg{flex:none;color:var(--accent)}
+  .acct-menu .acct-row .avatar{width:32px;height:32px;font-size:16px}
+  .acct-menu .acct-row b{font-size:14.5px}
   .side-user .avatar,.who .avatar{width:40px;height:40px;flex:none;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:20px;text-transform:uppercase}
 
   .main{max-width:1360px;width:100%;margin:0;padding-left:clamp(24px,3vw,44px);padding-right:max(clamp(24px,3vw,44px),env(safe-area-inset-right,0px));padding-block:0 48px}
@@ -441,3 +450,35 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
 
 .in-view{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--muted);margin:-2px 0 12px;min-height:34px;align-items:center;background:var(--surface-2);border-radius:12px;padding:6px 12px}
 .in-view b{font-family:var(--f-display);font-size:19px;color:var(--fg);font-weight:700;margin-right:2px}
+
+/* ===== accounts in Settings ===== */
+.avatar.other{background:var(--surface-2)!important;color:var(--fg)!important}
+.acct-list{display:grid;gap:8px}
+.acct-list:empty{display:none}
+.acct-line{display:flex;align-items:center;gap:11px;padding:8px 0;border-top:1px solid var(--line)}
+.acct-line .avatar{width:34px;height:34px;flex:none;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:17px;text-transform:uppercase}
+.acct-line .side-who,.mem .side-who{min-width:0;flex:1;display:grid}
+.acct-line .side-who b,.mem .side-who b{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-line .side-who span,.mem .side-who span{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.add-acct{display:inline-flex;align-items:center;gap:6px;justify-self:start;padding-inline:4px}
+.members{display:grid;border-top:1px solid var(--line)}
+.mem{border-bottom:1px solid var(--line)}
+.mem summary,.mem.mine{display:flex;align-items:center;gap:11px;padding:11px 2px;list-style:none;cursor:pointer}
+.mem.mine{cursor:default}
+.mem summary::-webkit-details-marker{display:none}
+.mem summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:10px}
+.mem .avatar{width:36px;height:36px;flex:none;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--f-display);font-weight:800;font-size:18px;text-transform:uppercase}
+.mem .tags{display:flex;gap:4px;flex:none}
+.tag{font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--on-accent-soft)}
+.tag.you{background:var(--surface-2);color:var(--muted)}
+.mem .chev{flex:none;color:var(--muted);transition:transform .15s}
+.mem[open] .chev{transform:rotate(90deg)}
+.mem-body{display:grid;gap:12px;padding:2px 2px 16px 47px}
+.mem-pw{display:grid;gap:6px}
+.pw-gen{display:flex;gap:6px;align-items:center}
+.pw-gen .input{flex:1}
+.pair{display:grid;gap:8px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px}
+.check input{width:18px;height:18px;accent-color:var(--accent)}
+@media (min-width:600px){.pair{grid-template-columns:1fr 1.3fr}}
+@media (prefers-reduced-motion:reduce){.mem .chev{transition:none}}

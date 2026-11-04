@@ -32,7 +32,7 @@ const weekStart = (n) => n - dow(n);
 
 /* ---------- state ---------- */
 const DEFAULTS = { unit: 'km', metric: 'pace', palette: 'tartan', mode: 'system', goal: null, range: '3M', smoothing: 'medium', volume: 'distance' };
-const state = { user: null, runs: [], settings: { ...DEFAULTS }, version: '', auth: null, signupMode: false, sort: { key: 'date', dir: -1 }, year: 'all', view: null };
+const state = { user: null, runs: [], settings: { ...DEFAULTS }, version: '', auth: null, signupMode: false, sort: { key: 'date', dir: -1 }, year: 'all', view: null, accounts: [], maxAccounts: 6, adding: false, admin: null };
 
 /* ---------- server ---------- */
 async function api(method, path, body) {
@@ -761,13 +761,209 @@ function renderSideWeek() {
     + `<span class="v num">${toUnit(km).toFixed(1)}<small>${uName()}</small></span><div class="sw-bars">${bars}</div>`
     + `<span class="sw-cmp">Last week ${fmtDist(last)} ${uName()}</span>`;
 }
-function renderSideUser() {
-  const user = state.user?.username || '', name = (state.settings.name || '').trim();
-  $('#sideName').textContent = name || user;
-  $('#sideSub').textContent = name ? `@${user}` : 'Add your name in Settings';
-  $('#sideAvatar').textContent = (name || user).slice(0, 1) || '?';
-  $('#sideCount').textContent = state.runs.length ? state.runs.length.toLocaleString() : '';
+const displayName = (a) => (a?.name || '').trim() || a?.username || '';
+const avatarHtml = (a, cls = '') => `<span class="avatar ${cls}" aria-hidden="true">${esc(displayName(a).slice(0, 1) || '?')}</span>`;
+const ICON_CHECK = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICON_PLUS = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+const ICON_GEAR = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="10" cy="17" r="2.2" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+const ICON_OUT = '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function meAccount() {
+  return { username: state.user?.username || '', name: state.settings.name || '' };
 }
+function renderSideUser() {
+  state.accounts = state.accounts.map((a) => (a.active ? { ...a, name: state.settings.name || '' } : a));
+  const me = meAccount(), n = state.accounts.length;
+  $('#sideName').textContent = displayName(me);
+  $('#sideSub').textContent = me.name ? `@${me.username}` : 'Add your name in Settings';
+  $('#sideUser').title = n > 1 ? `${n} accounts signed in. Switch, add an account or sign out` : 'Add an account or sign out';
+  $('#sideAvatar').textContent = displayName(me).slice(0, 1) || '?';
+  $('#sideCount').textContent = state.runs.length ? state.runs.length.toLocaleString() : '';
+  if (!$('#acctMenu').hidden) renderAcctMenu();
+}
+
+/* ---------- accounts: several signed in at once ---------- */
+async function loadAccounts() {
+  try {
+    const r = await api('GET', '/api/accounts');
+    state.accounts = r.accounts;
+    state.maxAccounts = r.maxAccounts;
+  } catch { state.accounts = [{ ...meAccount(), active: true }]; }
+  renderSideUser(); // also brings the active account's name up to date
+  if (currentTab() === 'settings') renderAccountCard();
+}
+function renderAcctMenu() {
+  const rows = state.accounts.map((a) => `<button type="button" role="menuitemradio" aria-checked="${a.active}" data-switch="${esc(a.username)}" class="acct-row">${avatarHtml(a, a.active ? '' : 'other')}<span class="side-who"><b>${esc(displayName(a))}</b><span>@${esc(a.username)}</span></span>${a.active ? ICON_CHECK : ''}</button>`).join('');
+  const many = state.accounts.length > 1, full = state.accounts.length >= state.maxAccounts;
+  $('#acctMenu').innerHTML = `<div class="menu-k">Signed in on this browser</div>${rows}<hr>`
+    + (full ? '' : `<button type="button" role="menuitem" data-act="add">${ICON_PLUS}Add another account</button>`)
+    + `<a role="menuitem" href="#settings" data-act="settings">${ICON_GEAR}Profile and settings</a><hr>`
+    + `<button type="button" role="menuitem" data-act="out">${ICON_OUT}Sign out of ${esc(displayName(meAccount()))}</button>`
+    + (many ? `<button type="button" role="menuitem" data-act="all">${ICON_OUT}Sign out of all accounts</button>` : '');
+}
+function openAcctMenu(open) {
+  const m = $('#acctMenu');
+  if (open === !m.hidden) return;
+  if (open) renderAcctMenu();
+  m.hidden = !open;
+  $('#sideUser').setAttribute('aria-expanded', open);
+  if (open) m.querySelector('[aria-checked="true"],[role="menuitem"]')?.focus();
+}
+$('#sideUser').addEventListener('click', () => openAcctMenu($('#acctMenu').hidden));
+$('#acctMenu').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-switch],[data-act]');
+  if (!el) return;
+  openAcctMenu(false);
+  if (el.dataset.switch) switchAccount(el.dataset.switch);
+  else if (el.dataset.act === 'add') startAddAccount();
+  else if (el.dataset.act === 'out') signOut();
+  else if (el.dataset.act === 'all') signOut({ all: true });
+});
+$('#acctMenu').addEventListener('keydown', (e) => {
+  const items = [...$('#acctMenu').querySelectorAll('button,a')];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+  } else if (e.key === 'Escape' || e.key === 'Tab') {
+    if (e.key === 'Escape') e.preventDefault();
+    openAcctMenu(false);
+    $('#sideUser').focus();
+  }
+});
+document.addEventListener('click', (e) => { if (!$('#acctMenu').hidden && !e.target.closest('.side-foot')) openAcctMenu(false); });
+
+async function switchAccount(username) {
+  if (username.toLowerCase() === state.user?.username.toLowerCase()) return;
+  try {
+    const me = await api('POST', '/api/accounts/switch', { username });
+    await enterApp(me);
+    toast(`Switched to ${displayName({ username: me.user.username, name: me.settings?.name })}`);
+  } catch (e) { toast(e.message); loadAccounts(); }
+}
+function startAddAccount() {
+  state.adding = true;
+  state.signupMode = false;
+  $('#authUser').value = $('#authPass').value = '';
+  showAuth();
+}
+async function signOut({ all = false } = {}) {
+  const was = displayName(meAccount());
+  let r = {};
+  try { r = await api('POST', '/api/logout', { all }); } catch {}
+  if (r.user) {
+    await enterApp(r);
+    toast(`Signed out of ${was}`);
+  } else {
+    state.user = null; state.runs = []; state.accounts = []; state.signupMode = false; state.adding = false;
+    showAuth();
+  }
+}
+
+/* ---------- settings: account card and people on this server ---------- */
+function renderAccountCard() {
+  const me = meAccount();
+  $('#whoName').textContent = displayName(me);
+  $('#whoSub').textContent = `@${me.username}${state.user?.isAdmin ? ' · Admin of this server' : ''}`;
+  $('#avatar').textContent = displayName(me).slice(0, 1) || '?';
+  $('#signOut').textContent = state.accounts.length > 1 ? `Sign out of ${displayName(me)}` : 'Sign out';
+  $('#delName').textContent = `@${me.username}`;
+  const others = state.accounts.filter((a) => !a.active);
+  const full = state.accounts.length >= state.maxAccounts;
+  $('#acctList').innerHTML = (others.length ? '<span class="lbl">Also signed in on this browser</span>' : '')
+    + others.map((a) => `<div class="acct-line">${avatarHtml(a, 'other')}<span class="side-who"><b>${esc(displayName(a))}</b><span>@${esc(a.username)}</span></span><button class="btn" type="button" data-switch="${esc(a.username)}">Switch</button></div>`).join('')
+    + (full ? '' : `<button class="btn ghost add-acct" type="button" data-act="add">${ICON_PLUS}Add another account</button>`);
+}
+$('#acctList').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-switch],[data-act]');
+  if (el?.dataset.switch) switchAccount(el.dataset.switch);
+  else if (el?.dataset.act === 'add') startAddAccount();
+});
+
+async function loadAdmin() {
+  if (!state.user?.isAdmin) { $('#membersGroup').hidden = true; return; }
+  try { state.admin = await api('GET', '/api/admin'); renderMembers(); }
+  catch (e) { $('#membersGroup').hidden = true; if (state.user?.isAdmin) toast(e.message); }
+}
+function renderMembers() {
+  const ad = state.admin;
+  $('#membersGroup').hidden = !ad || !state.user?.isAdmin;
+  if (!ad) return;
+  $$('#signupSeg button').forEach((b) => b.setAttribute('aria-pressed', (b.dataset.v === 'on') === ad.allowSignup));
+  $('#signupNote').textContent = ad.allowSignup
+    ? 'People can create their own account from the sign-in page.'
+    : 'When off, only an admin can add people.';
+  const meName = state.user.username.toLowerCase();
+  $('#members').innerHTML = ad.users.map((u) => {
+    const mine = u.username.toLowerCase() === meName;
+    const meta = `@${esc(u.username)} · ${u.runs.toLocaleString()} ${u.runs === 1 ? 'run' : 'runs'}${u.lastRun ? ` · last ${esc(fd(dn(u.lastRun), { day: 'numeric', month: 'short', year: 'numeric' }))}` : ''}`;
+    const tags = (u.isAdmin ? '<span class="tag">Admin</span>' : '') + (mine ? '<span class="tag you">You</span>' : '');
+    const head = `${avatarHtml(u, mine ? '' : 'other')}<span class="side-who"><b>${esc(displayName(u))}</b><span>${meta}</span></span><span class="tags">${tags}</span>`;
+    if (mine) return `<div class="mem mine">${head}</div>`;
+    const who = esc(u.username);
+    return `<details class="mem"><summary>${head}<svg class="chev" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+      <div class="mem-body">
+        <form class="mem-pw" data-u="${who}" novalidate><span class="lbl">New password for @${who}</span><div class="pw-gen"><input class="input" autocomplete="off" spellcheck="false" placeholder="10+ characters" aria-label="New password for ${who}"><button class="btn ghost" type="button" data-gen>Generate</button></div><div class="setrow"><span class="muted small">They're signed out everywhere and use this to sign back in.</span><button class="btn primary" type="submit">Set password</button></div></form>
+        <div class="setrow"><span>${u.isAdmin ? 'Admin: can manage people' : 'Not an admin'}</span><button class="btn" type="button" data-admin="${who}" data-v="${!u.isAdmin}">${u.isAdmin ? 'Remove admin' : 'Make admin'}</button></div>
+        <div class="setrow"><span>Remove @${who} and all their runs</span><button class="btn danger" type="button" data-del="${who}">Remove</button></div>
+      </div></details>`;
+  }).join('');
+}
+const PW_CHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+function readablePassword() {
+  const b = crypto.getRandomValues(new Uint8Array(15));
+  const c = [...b].map((x) => PW_CHARS[x % PW_CHARS.length]).join('');
+  return `${c.slice(0, 5)}-${c.slice(5, 10)}-${c.slice(10)}`;
+}
+async function adminCall(method, path, body, done) {
+  try { state.admin = await api(method, path, body); renderMembers(); if (done) toast(done); return true; }
+  catch (e) { toast(e.message); return false; }
+}
+$('#signupSeg').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) adminCall('PUT', '/api/admin/signup', { allow: b.dataset.v === 'on' }, b.dataset.v === 'on' ? 'Anyone can now create an account' : 'Only admins can add people now');
+});
+$('#addGen').addEventListener('click', () => { $('#addPass').value = readablePassword(); });
+$('#addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = $('#addUser').value.trim(), password = $('#addPass').value;
+  try {
+    state.admin = await api('POST', '/api/admin/users', { username, password, admin: $('#addAdmin').checked });
+    renderMembers();
+    $('#addMsg').textContent = '';
+    $('#addUser').value = $('#addPass').value = ''; $('#addAdmin').checked = false;
+    toast(`Added @${username}. Give them their password.`);
+  } catch (err) { $('#addMsg').textContent = err.message; }
+});
+$('#members').addEventListener('click', (e) => {
+  const gen = e.target.closest('[data-gen]');
+  if (gen) { gen.previousElementSibling.value = readablePassword(); return; }
+  const adm = e.target.closest('[data-admin]');
+  if (adm) { adminCall('PUT', `/api/admin/users/${encodeURIComponent(adm.dataset.admin)}`, { admin: adm.dataset.v === 'true' }, adm.dataset.v === 'true' ? `@${adm.dataset.admin} is now an admin` : `@${adm.dataset.admin} is no longer an admin`); return; }
+  const del = e.target.closest('[data-del]');
+  if (del) {
+    if (!del.dataset.armed) { del.dataset.armed = '1'; del.textContent = 'Remove for good?'; return; }
+    adminCall('DELETE', `/api/admin/users/${encodeURIComponent(del.dataset.del)}`, undefined, `Removed @${del.dataset.del}`);
+  }
+});
+$('#members').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target.closest('.mem-pw'), input = f.querySelector('input');
+  if (await adminCall('PUT', `/api/admin/users/${encodeURIComponent(f.dataset.u)}`, { password: input.value }, `New password set for @${f.dataset.u}`)) input.value = '';
+});
+$('#delAcc').addEventListener('click', () => { $('#delRow').hidden = true; $('#delForm').hidden = false; $('#delPass').focus(); });
+$('#delNo').addEventListener('click', () => { $('#delRow').hidden = false; $('#delForm').hidden = true; $('#delPass').value = ''; $('#delMsg').textContent = ''; });
+$('#delForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const was = displayName(meAccount());
+  try {
+    const r = await api('DELETE', '/api/account', { password: $('#delPass').value });
+    $('#delPass').value = ''; $('#delNo').click();
+    if (r.user) { await enterApp(r); toast(`Deleted ${was}`); }
+    else { state.user = null; state.runs = []; state.accounts = []; state.auth = await api('GET', '/api/status').catch(() => state.auth); showAuth(); }
+  } catch (err) { $('#delMsg').textContent = err.message; }
+});
+
 function renderStats() {
   const runs = state.runs, wk = weekly(), tot = runs.reduce((a, r) => a + r.km, 0), longest = runs.reduce((m, r) => Math.max(m, r.km), 0);
   const fastest = runs.filter((r) => r.km >= 3).reduce((m, r) => Math.min(m, r.sec / r.km), Infinity);
@@ -845,8 +1041,9 @@ function renderSettings() {
   const hasSamples = state.runs.some((r) => r.sample);
   $('#samplesLabel').textContent = hasSamples ? 'Sample runs are in your diary' : 'Five months of example runs';
   $('#samplesBtn').textContent = hasSamples ? 'Clear samples' : 'Load samples';
-  $('#whoName').textContent = state.user?.username || '';
-  $('#avatar').textContent = (state.user?.username || '?').slice(0, 1);
+  renderAccountCard();
+  if (state.user?.isAdmin) { if (state.admin) renderMembers(); else loadAdmin(); }
+  else $('#membersGroup').hidden = true;
   $('#versionText').textContent = state.version ? ` Version ${state.version}` : '';
   $('#supportGroup').hidden = !LINKS.donate;
   if (LINKS.donate) $('#donateLink').href = LINKS.donate;
@@ -898,30 +1095,47 @@ function toast(m) { const t = $('#toast'); t.textContent = m; t.hidden = false; 
 function showAuth() {
   $('#app').hidden = $('#tabs').hidden = $('#fab').hidden = true;
   $('#auth').hidden = false;
+  openAcctMenu(false);
   const st = state.auth || {};
   const signup = st.needsSetup || state.signupMode;
-  $('#authTitle').textContent = st.needsSetup ? 'Create your account' : signup ? 'Create an account' : 'Sign in to your running diary';
+  const adding = state.adding && !!state.user;
+  $('#authTitle').textContent = st.needsSetup ? 'Create your account' : adding ? (signup ? 'Create another account' : 'Add another account') : signup ? 'Create an account' : 'Sign in to your running diary';
   $('#authSubmit').textContent = signup ? 'Create account' : 'Sign in';
   $('#authPass').autocomplete = signup ? 'new-password' : 'current-password';
   $('#authNote').textContent = st.needsSetup
     ? 'This is the first account on this server. Choose a password of at least 10 characters.'
+    : adding ? "You'll stay signed in to your other accounts, and can switch between them from the account menu or Settings."
     : signup ? 'Use a password of at least 10 characters.' : 'Your runs are stored on this server only.';
   $('#authSwitchWrap').hidden = !!st.needsSetup || !st.allowSignup;
   $('#authSwitch').textContent = state.signupMode ? 'I already have an account' : 'Create an account';
+  $('#authBackWrap').hidden = !adding;
+  if (adding) $('#authBack').textContent = `Back to ${displayName(meAccount())}`;
   $('#authErr').textContent = '';
   setTimeout(() => $('#authUser').focus(), 50);
 }
 async function enterApp(me) {
+  const switched = state.user && state.user.username !== me.user.username;
   state.user = me.user;
+  state.adding = false;
+  if (switched) { state.view = null; state.year = 'all'; seriesCache = null; }
+  state.admin = null;
+  // Replace, not merge: one account's name, height or goal must never show up in another's.
+  for (const k of Object.keys(state.settings)) delete state.settings[k];
   Object.assign(state.settings, DEFAULTS, me.settings || {});
   cacheSettings();
-  const { runs } = await api('GET', '/api/runs');
+  const [{ runs }] = await Promise.all([api('GET', '/api/runs'), loadAccounts()]);
   state.runs = runs;
   $('#auth').hidden = true;
   $('#app').hidden = $('#tabs').hidden = false;
   showTab();
 }
 $('#authSwitch').addEventListener('click', () => { state.signupMode = !state.signupMode; showAuth(); });
+$('#authBack').addEventListener('click', () => {
+  state.adding = false; state.signupMode = false;
+  $('#auth').hidden = true;
+  $('#app').hidden = $('#tabs').hidden = false;
+  showTab();
+});
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const signup = state.auth?.needsSetup || state.signupMode;
@@ -938,13 +1152,7 @@ $('#authForm').addEventListener('submit', async (e) => {
     btn.disabled = false;
   }
 });
-async function signOut() {
-  try { await api('POST', '/api/logout'); } catch {}
-  state.user = null; state.runs = []; state.signupMode = false;
-  showAuth();
-}
-$('#signOut').addEventListener('click', signOut);
-$('#sideSignOut').addEventListener('click', signOut);
+$('#signOut').addEventListener('click', () => signOut());
 $('#profileForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const msg = $('#pfMsg');
