@@ -183,7 +183,23 @@ function applyTheme() {
   if (s.mode === 'system') r.removeAttribute('data-theme'); else r.setAttribute('data-theme', s.mode);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = getComputedStyle(r).getPropertyValue('--accent').trim() || '#C4492F';
+  const dark = isDark(), next = dark ? 'Switch to light theme' : 'Switch to dark theme';
+  r.classList.toggle('is-dark', dark);
+  const btn = $('#themeToggle');
+  if (btn) { btn.setAttribute('aria-label', next); btn.title = next; }
 }
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+const isDark = () => state.settings.mode === 'dark' || (state.settings.mode !== 'light' && darkQuery.matches);
+// Following the system: repaint when it switches between light and dark.
+darkQuery.addEventListener?.('change', () => { if (state.settings.mode === 'system') { applyTheme(); if (state.user) render(); } });
+let themeFade;
+$('#themeToggle').addEventListener('click', () => {
+  const r = document.documentElement;
+  r.classList.add('theme-fade');
+  clearTimeout(themeFade);
+  themeFade = setTimeout(() => r.classList.remove('theme-fade'), 400);
+  saveSettings({ mode: isDark() ? 'light' : 'dark' });
+});
 const logo = (sz) => `<svg width="${sz}" height="${sz}" viewBox="0 0 48 48" aria-hidden="true"><rect width="48" height="48" rx="14" fill="var(--accent)"/><ellipse cx="17" cy="31" rx="4.5" ry="7.5" transform="rotate(-18 17 31)" fill="var(--on-accent)"/><ellipse cx="31" cy="17" rx="4.5" ry="7.5" transform="rotate(-18 31 17)" fill="var(--on-accent)"/><circle cx="13" cy="21" r="1.6" fill="var(--on-accent)" opacity=".6"/><circle cx="35" cy="27" r="1.6" fill="var(--on-accent)" opacity=".6"/></svg>`;
 
 /* ---------- charts ---------- */
