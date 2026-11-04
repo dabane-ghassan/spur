@@ -132,6 +132,12 @@ jobs:
             echo
             sed 's/^• /- /' "fastlane/metadata/android/en-US/changelogs/${code}.txt" 2>/dev/null || echo "See the commits since the last release."
             echo
+            if [ -f "selfhost/changelog/${TAG}.md" ]; then
+              echo "## Self-hosted web app"
+              echo
+              cat "selfhost/changelog/${TAG}.md"
+              echo
+            fi
             echo "## Install"
             echo
             echo "Download **spur-${TAG}.apk** below on your Android phone (Android 7.0 or newer), open it and allow your browser to install it."

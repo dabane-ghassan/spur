@@ -1,0 +1,5 @@
+• Zoom and pan the trend charts: pinch, drag, double-tap or use the + and − buttons
+• A timeline strip under the charts shows your whole history; drag it to move through time
+• Long histories stay readable: dots shrink and volume shows monthly bars when zoomed out
+• Tabs and pages slide smoothly from side to side
+• Faster charts with years of runs
