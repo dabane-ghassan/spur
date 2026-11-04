@@ -1,16 +1,28 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Builds the spur Android APK on GitHub's servers.
-# Every push to main publishes a test build on the "latest-build" release;
-# a tag like v1.0.0 publishes a proper release.
+# Every change to the Android app on main publishes a test build
+# (spur-test-build.apk on the "latest-build" pre-release); a new version in
+# pubspec.yaml publishes a proper release.
+# Changes to the website, the self-hosted web app, docs or other workflows
+# don't rebuild the app.
 name: Android APK
 
 on:
   push:
     branches: [main]
     tags: ["v*"]
-    # The product page and the self-hosted web app don't affect the APK.
-    paths-ignore: ["site/**", "selfhost/**", ".github/workflows/pages.yml", "**.md"]
+    # Only what goes into the APK, its tests, store texts and this workflow.
+    paths:
+      - "lib/**"
+      - "android/**"
+      - "assets/**"
+      - "test/**"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "analysis_options.yaml"
+      - "fastlane/**"
+      - ".github/workflows/android.yml"
   workflow_dispatch:
 
 permissions:
@@ -92,6 +104,17 @@ jobs:
           git commit -qm "Build log for ${GITHUB_SHA::7} (failed)"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-log
 
+      # The test build is called spur-test-build.apk, so that spur.apk only ever means
+      # the latest real release (releases/latest/download/spur.apk on the website).
+      - name: Prepare test build
+        if: success() && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp spur.apk spur-test-build.apk
+          gh release delete-asset latest-build spur.apk --yes 2>/dev/null || true
+
       - name: Publish test build
         if: success() && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -100,9 +123,9 @@ jobs:
           name: Latest test build
           prerelease: true
           make_latest: false
-          files: spur.apk
+          files: spur-test-build.apk
           body: |
-            Test build of `${{ github.sha }}`, made automatically from the main branch.
+            Test build of `${{ github.sha }}`, made automatically from the main branch. Not a release: for everyday use, get the [latest release](https://github.com/${{ github.repository }}/releases/latest).
             ${{ env.HAS_KEY == 'true' && 'Signed with the spur release key, so it installs over earlier test builds.' || 'Signed with a throwaway test key: uninstall the previous build before installing this one.' }}
             F-Droid signs its own builds, so switching to F-Droid later needs one uninstall.
 

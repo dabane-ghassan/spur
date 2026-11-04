@@ -421,7 +421,9 @@ var LINKS = {
       meta.textContent = 'Version ' + ver + (date ? ', released ' + date : '') + size + '. ';
       var notes = document.createElement('a'); notes.href = rel.html_url; notes.textContent = 'Release notes';
       meta.appendChild(notes);
-      document.getElementById('apkLink').textContent = 'Download spur ' + ver;
+      var link = document.getElementById('apkLink');
+      link.textContent = 'Download spur ' + ver;
+      if (apk && apk.browser_download_url) link.href = apk.browser_download_url;
     })
     .catch(function () {});
   var btn = document.getElementById('copyBtn');
