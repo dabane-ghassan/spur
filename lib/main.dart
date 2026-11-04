@@ -20,6 +20,7 @@ import 'screens/run_editor.dart';
 import 'screens/runs_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/stats_screen.dart';
+import 'ui/sliding_tabs.dart';
 import 'ui/spur_logo.dart';
 import 'ui/store_scope.dart';
 import 'ui/theme.dart';
@@ -95,7 +96,7 @@ class _HomeShellState extends State<HomeShell> {
           ],
         ),
       ),
-      body: IndexedStack(index: _tab, children: pages),
+      body: SlidingTabs(index: _tab, children: pages),
       floatingActionButton: _tab == 3
           ? null
           : FloatingActionButton.extended(

@@ -38,6 +38,11 @@ ThemeData buildTheme(String paletteId, Brightness brightness) {
   );
   return base.copyWith(
     scaffoldBackgroundColor: scheme.surface,
+    // Pushed pages slide in from the side, like the tabs.
+    pageTransitionsTheme: const PageTransitionsTheme(builders: {
+      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+    }),
     appBarTheme: AppBarTheme(
       backgroundColor: scheme.surface,
       surfaceTintColor: Colors.transparent,
