@@ -259,7 +259,10 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .mobile-only{display:none!important}
   .desktop-only{display:revert!important}
   body{font-size:15.5px}
-  .shell:not([hidden]){display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh;min-height:100dvh}
+  /* The sidebar is pinned to the screen; the shell paints its column too, so it always runs the full page height
+     (in full-page screenshots, when printing, or on a long page with a short window). */
+  .shell:not([hidden]){display:grid;grid-template-columns:248px minmax(0,1fr);min-height:100vh;min-height:100dvh;
+    background:linear-gradient(to right,var(--surface) 0 247px,var(--line) 247px 248px,transparent 248px)}
   .side{display:flex;flex-direction:column;gap:22px;position:sticky;top:0;height:100vh;height:100dvh;overflow:auto;background:var(--surface);border-right:1px solid var(--line);padding:24px max(16px,env(safe-area-inset-left,0px)) 20px 18px}
   .side .brand{padding:0 8px}
   .side-nav{display:grid;gap:4px}
