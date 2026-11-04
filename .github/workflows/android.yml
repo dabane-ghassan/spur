@@ -137,7 +137,9 @@ jobs:
             echo "## Install"
             echo
             echo "Download **spur-${TAG}.apk** below on your Android phone (Android 7.0 or newer), open it and allow your browser to install it."
-            echo "spur asks for no permissions and has no internet access."
+            echo "spur asks for no permissions and has no internet access. Both APKs below are the same file."
+            echo
+            echo "To be told about new versions, add spur to [Obtainium](https://obtainium.imranr.dev/) with the badge in the [README](https://github.com/${GITHUB_REPOSITORY}#readme)."
             echo
             echo "Self-hosting the web app instead? See [selfhost/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/selfhost/README.md)."
           } > release-notes.md
@@ -151,7 +153,11 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: spur ${{ steps.rel.outputs.tag }}
           body_path: release-notes.md
-          files: spur-${{ steps.rel.outputs.tag }}.apk
+          # spur-vX.Y.Z.apk for people and Obtainium; spur.apk so that
+          # releases/latest/download/spur.apk always gives the newest version.
+          files: |
+            spur-${{ steps.rel.outputs.tag }}.apk
+            spur.apk
           prerelease: false
           make_latest: true
 

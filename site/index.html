@@ -134,6 +134,10 @@ section{padding-block:72px}
 .way .tag{font-family:var(--f-display);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:13px;color:var(--accent)}
 .way p{color:var(--muted)}
 .row-btns{display:flex;flex-wrap:wrap;gap:10px}
+.apk-meta{font-size:14px;margin:10px 0 0;color:var(--muted)}
+.obtainium{display:inline-block;margin-top:14px;border-radius:8px;line-height:0}
+.obtainium img{display:block;width:161px;height:auto}
+.obtainium:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
 pre{margin:0;background:var(--code-bg);color:var(--code-ink);border-radius:14px;padding:18px 20px;overflow-x:auto;font-size:14.5px;line-height:1.7;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
 pre .c{opacity:.55}
 .codebox pre{padding-top:46px}
@@ -324,8 +328,10 @@ footer .name{font-family:var(--f-display);font-weight:800;font-style:italic;font
         <span class="tag">Android</span>
         <h3>The app, for Android</h3>
         <p>A native app with no permissions and no internet access. Everything stays on your phone.</p>
-        <div class="row-btns"><a class="btn accent" href="https://github.com/dabane-ghassan/spur/releases/tag/latest-build">Download the APK</a><span class="btn outline" aria-disabled="true">F-Droid <small>· coming soon</small></span></div>
-        <p style="font-size:15px">For Android 7.0 and newer. Open the file on your phone and allow your browser to install it.</p>
+        <div class="row-btns"><a class="btn accent" id="apkLink" href="https://github.com/dabane-ghassan/spur/releases/latest/download/spur.apk">Download the APK</a><span class="btn outline" aria-disabled="true">F-Droid <small>· coming soon</small></span></div>
+        <p class="apk-meta" id="apkMeta">Always the latest release. <a href="https://github.com/dabane-ghassan/spur/releases/latest">Release notes</a></p>
+        <a class="obtainium" href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.github.dabaneghassan.spur%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fdabane-ghassan%2Fspur%22%2C%22author%22%3A%22Ghassan%20Dabane%22%2C%22name%22%3A%22spur%22%2C%22additionalSettings%22%3A%22%7B%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Espur-v.%2B%5C%5C%5C%5C.apk%24%5C%22%7D%22%7D" rel="noopener"><img src="img/obtainium.png" width="161" height="48" alt="Get it on Obtainium"></a>
+        <p style="font-size:15px">For Android 7.0 and newer. Open the file on your phone and allow your browser to install it, or add spur to <a href="https://obtainium.imranr.dev/">Obtainium</a> to be told about new versions.</p>
       </div>
       <div class="way">
         <span class="tag">Self-hosted</span>
@@ -402,6 +408,22 @@ var LINKS = {
     var pre = document.getElementById('installCode');
     pre.innerHTML = 'git clone ' + LINKS.source.replace(/[<>&"]/g, '') + '\ncd spur/selfhost\ndocker compose up -d\n<span class="c"># then open http://your-server:4219</span>';
   }
+  // Show which version the download button gives, straight from GitHub.
+  fetch('https://api.github.com/repos/dabane-ghassan/spur/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (rel) {
+      if (!rel || !rel.tag_name) return;
+      var apk = (rel.assets || []).filter(function (a) { return /^spur-v.+\.apk$/.test(a.name); })[0];
+      var meta = document.getElementById('apkMeta');
+      var ver = String(rel.tag_name).replace(/^v/, '');
+      var date = rel.published_at ? new Date(rel.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      var size = apk ? ' · ' + Math.round(apk.size / 1048576) + ' MB' : '';
+      meta.textContent = 'Version ' + ver + (date ? ', released ' + date : '') + size + '. ';
+      var notes = document.createElement('a'); notes.href = rel.html_url; notes.textContent = 'Release notes';
+      meta.appendChild(notes);
+      document.getElementById('apkLink').textContent = 'Download spur ' + ver;
+    })
+    .catch(function () {});
   var btn = document.getElementById('copyBtn');
   btn.addEventListener('click', function () {
     var text = document.getElementById('installCode').textContent.split('\n').filter(function (l) { return l && l.charAt(0) !== '#'; }).join('\n');

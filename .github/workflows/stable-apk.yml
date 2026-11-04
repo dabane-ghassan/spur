@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Makes sure the newest release has spur.apk, a copy of spur-vX.Y.Z.apk with a
+# fixed name, so https://github.com/<repo>/releases/latest/download/spur.apk
+# (used by the website and README) always gives the newest version.
+# New releases get it from android.yml; this fills in older ones.
+name: Stable APK link
+
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/stable-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Add spur.apk to the latest release if it is missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=$(gh release view --json tagName --jq .tagName)
+          echo "latest release: $tag"
+          if gh release view "$tag" --json assets --jq '.assets[].name' | grep -qx 'spur.apk'; then
+            echo "spur.apk is already there"; exit 0
+          fi
+          gh release download "$tag" --pattern 'spur-v*.apk' --output spur.apk
+          gh release upload "$tag" spur.apk
+          gh release view "$tag" --json assets --jq '.assets[] | "\(.name) \(.size)"'
