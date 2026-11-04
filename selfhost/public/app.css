@@ -295,10 +295,11 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .ov-banner{grid-column:1/-1}
   .ov-bib{grid-column:span 6;align-self:stretch}
   .ov-kpis{grid-column:span 6;align-self:stretch;grid-auto-rows:1fr}
-  .ov-trends{grid-column:1/-1}
+  .ov-trends,.ov-nav,.ov-main{grid-column:1/-1}
   .ov-chart,.ov-volume{grid-column:1/-1}
-  .ov-goal{grid-column:1/-1}
-  .ov-recent{grid-column:1/-1}
+  .ov-side{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:start}
+  .ov-side .ov-goal{grid-column:1/-1}
+  .ov-main,.ov-side{gap:20px}
   .bib .big{font-size:clamp(84px,8vw,124px)}
   .kpi{padding:16px 18px}
   .kpi .v{font-size:36px}
@@ -324,9 +325,10 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
 @media (min-width:1320px){
   .ov-bib{grid-column:span 5}
   .ov-kpis{grid-column:span 7}
+  .ov-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
   .ov-chart,.ov-volume{grid-column:span 6;align-self:stretch}
-  .ov-goal{grid-column:span 5;align-self:start}
-  .ov-recent{grid-column:span 7}
+  .ov-main{grid-column:span 8}
+  .ov-side{grid-column:span 4;display:flex;flex-direction:column;align-items:stretch}
 }
 @keyframes pop{from{transform:scale(.97);opacity:.4}to{transform:none;opacity:1}}
 
@@ -363,3 +365,50 @@ select.input{font-size:15px;padding:8px 32px 8px 12px;width:auto;appearance:none
   .trends-bar h2{flex-basis:100%}
   .smooth-ctl .lbl{display:none}
 }
+
+/* zoomable trends */
+.zoomable{touch-action:pan-y;cursor:grab;user-select:none;-webkit-user-select:none}
+.zoomable.grabbing{cursor:grabbing}
+.zoom-ctl{display:flex;align-items:center;gap:6px}
+.icon-btn{width:34px;height:34px;border-radius:50%;border:0;background:var(--surface-2);color:var(--fg);font-size:19px;font-weight:600;line-height:1;display:grid;place-items:center}
+.icon-btn:hover:not(:disabled){background:var(--accent-soft);color:var(--on-accent-soft)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.nav-strip{display:grid;gap:4px;min-width:0}
+.nav-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:0 2px;font-size:13px;font-weight:600}
+#navChart{touch-action:none;cursor:pointer;user-select:none;-webkit-user-select:none}
+#navChart svg:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px;border-radius:8px}
+.hint{margin:0;font-size:12px;color:var(--muted);padding:0 2px}
+
+/* dashboard columns (phones; wider layouts are set in the 960px+ rules) */
+@media (max-width:959px){.ov-main,.ov-side{display:flex;flex-direction:column;gap:14px;min-width:0}}
+.ov-main,.ov-side{min-width:0}
+
+/* activity calendar */
+.cal svg{display:block;width:100%;height:auto}
+.cal text{font-family:var(--f-body);fill:var(--muted)}
+.cal rect.c{fill:var(--surface-2)}
+.cal rect.l1{fill:var(--accent);fill-opacity:.28}
+.cal rect.l2{fill:var(--accent);fill-opacity:.5}
+.cal rect.l3{fill:var(--accent);fill-opacity:.75}
+.cal rect.l4{fill:var(--accent)}
+.cal rect[data-id]{cursor:pointer}
+.cal rect[data-id]:hover{stroke:var(--fg);stroke-width:1.5}
+.cal-legend{display:flex;align-items:center;gap:4px;justify-content:flex-end;margin-top:10px}
+.cal-legend i{width:11px;height:11px;border-radius:3px;display:inline-block;background:var(--surface-2)}
+.cal-legend i.l1{background:color-mix(in srgb,var(--accent) 28%,var(--surface-2))}
+.cal-legend i.l2{background:color-mix(in srgb,var(--accent) 50%,var(--surface-2))}
+.cal-legend i.l3{background:color-mix(in srgb,var(--accent) 75%,var(--surface-2))}
+.cal-legend i.l4{background:var(--accent)}
+
+/* records + predictions */
+.records{display:grid}
+.rec{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;padding:9px 2px;border-bottom:1px solid var(--line)}
+.rec:last-child{border-bottom:0}
+.rec .rk{grid-column:1;font-size:13.5px;font-weight:600}
+.rec .rd{grid-column:1;font-size:12px;color:var(--muted)}
+.rec .rv{grid-column:2;grid-row:1/span 2;align-self:center;text-align:right;font-family:var(--f-display);font-weight:700;font-size:21px}
+.rec[data-id]{cursor:pointer;border-radius:8px}
+.rec[data-id]:hover{background:var(--surface-2)}
+
+.in-view{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--muted);margin:-2px 0 12px;min-height:34px;align-items:center;background:var(--surface-2);border-radius:12px;padding:6px 12px}
+.in-view b{font-family:var(--f-display);font-size:19px;color:var(--fg);font-weight:700;margin-right:2px}

@@ -113,6 +113,96 @@ class Analysis {
     return xs.length < 4 ? null : _slope(xs, ys);
   }
 
+  // ---- precomputed trend lines (for drawing and zooming) -------------------
+
+  /// First and last day covered by [paceSeries] and [volumeSeries].
+  int get seriesStart => runs.isEmpty ? today : runs.first.day;
+  int get seriesEnd => runs.isEmpty ? today : math.max(today, runs.last.day);
+
+  /// The pace trend for every day from [seriesStart] to [seriesEnd], worked out
+  /// once so charts can pan and zoom without recomputing. Same values as
+  /// [smoothAt].
+  late final List<double?> paceSeries = _buildPace();
+
+  final Map<VolumeMetric, List<double>> _volumeCache = {};
+
+  /// The volume trend (per week, km or hours) for every day of the history.
+  List<double> volumeSeries(VolumeMetric metric) => _volumeCache[metric] ??= _buildVolume(metric);
+
+  double? paceOn(int day) {
+    final i = day - seriesStart;
+    return i >= 0 && i < paceSeries.length ? paceSeries[i] : null;
+  }
+
+  double? volumeOn(int day, VolumeMetric metric) {
+    final s = volumeSeries(metric), i = day - seriesStart;
+    return i >= 0 && i < s.length ? s[i] : null;
+  }
+
+  List<double> get _weights {
+    final reach = (4 * sigma).ceil();
+    return [for (var d = 0; d <= reach; d++) smoothing.isOn ? math.exp(-d * d / (2 * sigma * sigma)) : 1.0];
+  }
+
+  List<double?> _buildPace() {
+    if (runs.isEmpty) return const [];
+    final n = seriesEnd - seriesStart + 1;
+    final sum = List<double>.filled(n, 0.0), count = List<int>.filled(n, 0);
+    final last = List<double?>.filled(n, null);
+    for (final r in runs) {
+      final i = r.day - seriesStart;
+      sum[i] += r.secPerKm;
+      count[i]++;
+      last[i] = r.secPerKm;
+    }
+    final w = _weights, out = List<double?>.filled(n, null);
+    var nearest = -1 << 30;
+    double? latest;
+    for (var i = 0; i < n; i++) {
+      if (count[i] > 0) {
+        nearest = i;
+        latest = last[i];
+      }
+      if (i - nearest > gapLimit) continue;
+      if (!smoothing.isOn) {
+        out[i] = latest;
+        continue;
+      }
+      double sw = 0, sv = 0;
+      for (var d = 0; d < w.length && d <= i; d++) {
+        if (count[i - d] == 0) continue;
+        sw += w[d] * count[i - d];
+        sv += w[d] * sum[i - d];
+      }
+      out[i] = sw > 1e-6 ? sv / sw : null;
+    }
+    return out;
+  }
+
+  List<double> _buildVolume(VolumeMetric metric) {
+    if (runs.isEmpty) return const [];
+    final n = seriesEnd - seriesStart + 1;
+    final daily = List<double>.filled(n, 0.0);
+    for (final r in runs) {
+      daily[r.day - seriesStart] += metric == VolumeMetric.time ? r.seconds / 3600 : r.km;
+    }
+    final last7 = List<double>.filled(n, 0.0);
+    for (var i = 0; i < n; i++) {
+      last7[i] = daily[i] + (i > 0 ? last7[i - 1] : 0.0) - (i >= 7 ? daily[i - 7] : 0.0);
+    }
+    if (!smoothing.isOn) return last7;
+    final w = _weights, out = List<double>.filled(n, 0.0);
+    for (var i = 0; i < n; i++) {
+      double sw = 0, sv = 0;
+      for (var d = 0; d < w.length && d <= i; d++) {
+        sw += w[d];
+        sv += w[d] * last7[i - d];
+      }
+      out[i] = sv / sw;
+    }
+    return out;
+  }
+
   // ---- volume ----------------------------------------------------------------
 
   /// Volume per calendar day: kilometres, or hours for [VolumeMetric.time].
