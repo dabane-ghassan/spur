@@ -64,13 +64,18 @@ jobs:
           KS_B64: ${{ secrets.SPUR_KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.SPUR_KEYSTORE_PASSWORD }}
         run: |
-          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/spur.jks"
-          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/spur.jks"' EXIT
+          printf '%s' "$KS_B64" | tr -d ' \r\n' | base64 -d > "$RUNNER_TEMP/spur.jks"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)
+          echo "apksigner from $BT"
           "$BT/apksigner" sign --ks "$RUNNER_TEMP/spur.jks" --ks-key-alias spur \
             --ks-pass env:KS_PASS --key-pass env:KS_PASS \
             --out spur.apk build/app/outputs/flutter-apk/app-release.apk
-          "$BT/apksigner" verify --print-certs spur.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
-          rm -f "$RUNNER_TEMP/spur.jks"
+          # verify fails the step if the signature is bad. The certificate lines are only
+          # printed for the log; their wording differs between build-tools versions.
+          "$BT/apksigner" verify --verbose --print-certs spur.apk > verify.txt
+          grep -E "Verifies|certificate (DN|SHA-256)" verify.txt || cat verify.txt
 
       # On failure, keep the full log on a "ci-log" branch so it can be read with plain git.
       - name: Save the build log
