@@ -8,16 +8,29 @@
 | `selfhost/` | The self-hosted web app (Node.js, SQLite, Docker Compose) |
 | `site/` | The product page, published to GitHub Pages |
 | `fastlane/` | Store texts, screenshots and changelogs, read by F-Droid |
-| `fdroid/` | Draft F-Droid build recipe |
+| `fdroid/` | The F-Droid build recipe, ready to submit |
+| `tool/screenshots/` | Renders the store screenshots from the real app screens |
 
 ## Build the APK locally
 
-Install [Flutter](https://docs.flutter.dev/get-started/install) (3.32 or newer) and the Android SDK, then:
+Install [Flutter](https://docs.flutter.dev/get-started/install) **3.47.9** (the version CI and F-Droid
+build with) and the Android SDK, then:
 
 ```sh
-tool/setup.sh            # generates the missing Android files, analyses, tests and builds
+tool/setup.sh            # analyses, tests and builds a release APK
 flutter run              # run on a connected phone or emulator
 flutter test
+```
+
+All Android build files are in the repository, and `pubspec.lock` pins every package, so a
+build from source matches the published one. When you move to a newer Flutter, change the
+version in `.github/workflows/android.yml` and in the F-Droid recipe together.
+
+### Store screenshots
+
+```sh
+flutter test --update-goldens tool/screenshots
+cp tool/screenshots/out/*.png fastlane/metadata/android/en-US/images/phoneScreenshots/
 ```
 
 The app ID is `io.github.dabaneghassan.spur`. It must match the package of
@@ -56,9 +69,17 @@ release with the changelog and `spur-v1.0.1.apk` attached. Pushing a `v*` tag yo
 
 ## F-Droid
 
-Submit `fdroid/io.github.dabaneghassan.spur.yml` as `metadata/io.github.dabaneghassan.spur.yml`
-in a merge request to [fdroiddata](https://gitlab.com/fdroid/fdroiddata), with the Flutter version
-you build with. Texts and screenshots come from `fastlane/`.
+`fdroid/io.github.dabaneghassan.spur.yml` is the build recipe; it passes `fdroid lint`. To submit:
+
+1. Fork [fdroiddata](https://gitlab.com/fdroid/fdroiddata) on GitLab and create a branch named
+   `io.github.dabaneghassan.spur`.
+2. Copy the recipe to `metadata/io.github.dabaneghassan.spur.yml`.
+3. Commit it as `New App: io.github.dabaneghassan.spur` and push. The fork's CI lints and test-builds it.
+4. Open a merge request to fdroiddata from that branch.
+
+Texts, icon, screenshots and changelogs come from `fastlane/`. After that, F-Droid picks up each
+new version by itself: bump `pubspec.yaml`, push, and the `v*` tag the release workflow creates is
+enough. F-Droid signs its own builds, so its APK and the GitHub one can't update each other.
 
 ## Product page
 

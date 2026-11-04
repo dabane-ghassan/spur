@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
-# One-time setup: generates the remaining Android build files, then analyses,
-# tests and builds a release APK.
+# Analyses, tests and builds a release APK. All Android build files are in the
+# repository; use Flutter 3.47.9, the version CI and F-Droid build with.
 #
-#   tool/setup.sh io.github.yourname
-#
-# The argument becomes the start of the app ID (io.github.yourname.spur).
-# Choose it carefully: once the app is on F-Droid the ID can never change.
+#   tool/setup.sh
 set -euo pipefail
 
-ORG="${1:-io.github.dabaneghassan}"   # the app ID becomes <org>.spur; it must match MainActivity.kt
 cd "$(dirname "$0")/.."
 
 command -v flutter >/dev/null || { echo "Flutter is not installed: https://docs.flutter.dev/get-started/install"; exit 1; }
-
-# Fills in only the files that are missing (Gradle files, MainActivity, styles).
-# Existing files such as lib/, the manifest and the icons are left alone.
-flutter create --org "$ORG" --project-name spur --platforms android .
 
 flutter pub get
 flutter analyze --no-fatal-infos
