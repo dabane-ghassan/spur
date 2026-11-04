@@ -1,0 +1,2 @@
+• Signed with spur's permanent release key: from this version on, updates install over the previous one, including through Obtainium
+• Updating from 1.0.2 or older needs one last uninstall. Export your runs as a CSV file in Settings first, then import them again
