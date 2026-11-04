@@ -25,6 +25,29 @@ void main() {
     expect(find.text('TOTALS'), findsOneWidget);
   });
 
+  testWidgets('tabs slide and keep their place', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = await RunStore.load();
+    store.loadSamples();
+    await tester.pumpWidget(SpurApp(store: store));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, -300));
+    await tester.pumpAndSettle();
+    final before = tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+    expect(before, greaterThan(0));
+
+    await tester.tap(find.text('Runs'));
+    await tester.pump(const Duration(milliseconds: 100)); // mid-slide: both pages on screen
+    expect(find.text('TREND PACE'), findsOneWidget, reason: 'the overview is still sliding out');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Overview'));
+    await tester.pumpAndSettle();
+
+    final after = tester.state<ScrollableState>(find.byType(Scrollable).first).position.pixels;
+    expect(after, before, reason: 'the overview kept its scroll position');
+  });
+
   testWidgets('logging a run from the sheet', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final store = await RunStore.load();
