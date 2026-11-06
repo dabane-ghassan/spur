@@ -19,6 +19,7 @@ void main() {
 
     expect(find.text('Clear samples'), findsOneWidget);
     expect(find.text('TREND PACE'), findsOneWidget);
+    expect(find.text('THIS WEEK'), findsOneWidget);
 
     await tester.tap(find.text('Stats'));
     await tester.pumpAndSettle();

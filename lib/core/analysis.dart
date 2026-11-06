@@ -286,6 +286,68 @@ class Analysis {
   }
 
   /// Compares this week's distance with the average of the three before it.
+  /// This calendar week so far (weeks start on Monday), with last week up to the
+  /// same weekday for a fair comparison.
+  WeekSoFar weekSoFar() {
+    final start = weekStart(today);
+    final km = List<double>.filled(7, 0), sec = List<int>.filled(7, 0);
+    var runsThisWeek = 0;
+    double lastKmSameDays = 0, lastKmWhole = 0;
+    int lastSecSameDays = 0, lastSecWhole = 0;
+    final upTo = today - start; // 0 on Monday
+    for (final r in runs) {
+      final d = r.day - start;
+      if (d >= 0 && d < 7 && r.day <= today) {
+        km[d] += r.km;
+        sec[d] += r.seconds;
+        runsThisWeek++;
+      } else if (d >= -7 && d < 0) {
+        lastKmWhole += r.km;
+        lastSecWhole += r.seconds;
+        if (d + 7 <= upTo) {
+          lastKmSameDays += r.km;
+          lastSecSameDays += r.seconds;
+        }
+      }
+    }
+    return WeekSoFar(
+      start: start,
+      today: today,
+      kmByDay: km,
+      secondsByDay: sec,
+      runs: runsThisWeek,
+      lastWeekKmSoFar: lastKmSameDays,
+      lastWeekSecondsSoFar: lastSecSameDays,
+      lastWeekKm: lastKmWhole,
+      lastWeekSeconds: lastSecWhole,
+    );
+  }
+
+  /// Volume between two days (inclusive), for the part of the timeline on screen.
+  WindowVolume windowVolume(double t0, double t1, VolumeMetric metric) {
+    final weeks = <int, double>{};
+    var total = 0.0, count = 0;
+    for (final r in runs) {
+      if (r.day < t0 || r.day > t1) continue;
+      final v = metric == VolumeMetric.time ? r.seconds / 3600 : r.km;
+      total += v;
+      count++;
+      weeks.update(weekStart(r.day), (x) => x + v, ifAbsent: () => v);
+    }
+    int? bestWeek;
+    for (final e in weeks.entries) {
+      if (bestWeek == null || e.value > weeks[bestWeek]!) bestWeek = e.key;
+    }
+    final spanWeeks = math.max(1.0, (t1 - t0 + 1) / 7);
+    return WindowVolume(
+      runs: count,
+      total: total,
+      perWeek: total / spanWeeks,
+      bestWeekStart: bestWeek,
+      bestWeek: bestWeek == null ? 0 : weeks[bestWeek]!,
+    );
+  }
+
   LoadCheck loadCheck() {
     final weeks = weeklyKm();
     final cur = weekStart(today);
@@ -378,6 +440,54 @@ class GoalForecast {
   /// Distance from the goal in seconds per km (always positive).
   final double gapSecPerKm;
   final int? reachDay;
+}
+
+/// The current Monday-to-Sunday week so far.
+class WeekSoFar {
+  const WeekSoFar({
+    required this.start,
+    required this.today,
+    required this.kmByDay,
+    required this.secondsByDay,
+    required this.runs,
+    required this.lastWeekKmSoFar,
+    required this.lastWeekSecondsSoFar,
+    required this.lastWeekKm,
+    required this.lastWeekSeconds,
+  });
+
+  /// Monday of this week, and today.
+  final int start, today;
+
+  /// Monday first; days after today are 0.
+  final List<double> kmByDay;
+  final List<int> secondsByDay;
+  final int runs;
+
+  /// Last week from Monday up to the same weekday as today, and the whole of it.
+  final double lastWeekKmSoFar, lastWeekKm;
+  final int lastWeekSecondsSoFar, lastWeekSeconds;
+
+  double get km => kmByDay.fold(0.0, (a, b) => a + b);
+  int get seconds => secondsByDay.fold(0, (a, b) => a + b);
+  int get daysRun => kmByDay.where((k) => k > 0).length;
+}
+
+/// Volume over the part of the timeline on screen.
+class WindowVolume {
+  const WindowVolume({
+    required this.runs,
+    required this.total,
+    required this.perWeek,
+    required this.bestWeekStart,
+    required this.bestWeek,
+  });
+
+  final int runs;
+
+  /// km or hours, whichever was asked for.
+  final double total, perWeek, bestWeek;
+  final int? bestWeekStart;
 }
 
 class LoadCheck {
