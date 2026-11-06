@@ -1,0 +1,2 @@
+• New This week card: distance, time and runs since Monday, a bar per day, and how you compare with last week up to the same day
+• The volume chart now has its own stats (total, per week, best week, runs) that change as you zoom, like the pace ones
