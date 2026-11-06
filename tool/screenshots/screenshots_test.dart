@@ -91,7 +91,7 @@ void main() {
 
   testWidgets('2 trends', (tester) async {
     await phone(tester, await _store());
-    await tester.drag(find.byType(ListView).first, const Offset(0, -560));
+    await tester.drag(find.byType(ListView).first, const Offset(0, -1180));
     await tester.pumpAndSettle();
     await shot('2');
   });
