@@ -3,7 +3,7 @@ description: "spur – a private running diary. Log distance and time, see your 
 publish_to: "none"
 
 # versionName+versionCode. Bump both for every release (F-Droid reads them from git tags).
-version: 1.0.3+4
+version: 1.0.4+5
 
 environment:
   sdk: ^3.5.0
