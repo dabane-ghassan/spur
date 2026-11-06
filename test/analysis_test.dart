@@ -153,6 +153,59 @@ void main() {
     });
   });
 
+  group('this week and the zoomed volume', () {
+    // Thursday 5 November 2026; the week started on Monday 2 November.
+    final thu = dayFromYmd(2026, 11, 5);
+    final mon = weekStart(thu);
+
+    test('the week so far starts on Monday and compares with last week up to the same day', () {
+      final runs = [
+        run(mon, 10, 3000), // Mon
+        run(mon + 2, 21.1, 7200), // Wed
+        run(mon - 7, 8, 2400), // last Mon: counted
+        run(mon - 4, 12, 3600), // last Thu: counted (same weekday)
+        run(mon - 2, 30, 10800), // last Sat: only in the whole week
+        run(mon - 8, 50, 18000), // the Sunday before: not last week
+      ];
+      final w = Analysis(runs, today: thu).weekSoFar();
+      expect(isoDate(w.start), '2026-11-02');
+      expect(w.km, closeTo(31.1, 1e-9));
+      expect(w.seconds, 10200);
+      expect(w.runs, 2);
+      expect(w.daysRun, 2);
+      expect(w.kmByDay, [10, 0, 21.1, 0, 0, 0, 0]);
+      expect(w.lastWeekKmSoFar, 20);
+      expect(w.lastWeekKm, 50);
+      expect(w.lastWeekSeconds, 2400 + 3600 + 10800);
+    });
+
+    test('runs logged ahead of today are left out of the week so far', () {
+      final w = Analysis([run(mon, 5, 1500), run(mon + 5, 40, 14400)], today: thu).weekSoFar();
+      expect(w.km, 5);
+    });
+
+    test('volume stats follow the part of the timeline on screen', () {
+      final runs = [
+        for (var i = 0; i < 8; i++) run(mon - 7 * i, 10.0 + i, 3600), // one run a week, bigger further back
+      ];
+      final a = Analysis(runs, today: thu);
+      // The last four weeks: 10 + 11 + 12 + 13 km.
+      final recent = a.windowVolume((mon - 21).toDouble(), (mon + 6).toDouble(), VolumeMetric.distance);
+      expect(recent.runs, 4);
+      expect(recent.total, 46);
+      expect(recent.perWeek, closeTo(46 / 4, 1e-9));
+      expect(recent.bestWeek, 13);
+      expect(recent.bestWeekStart, mon - 21);
+      // Zooming on older weeks gives other numbers.
+      final older = a.windowVolume((mon - 49).toDouble(), (mon - 22).toDouble(), VolumeMetric.distance);
+      expect(older.total, 14 + 15 + 16 + 17);
+      expect(older.bestWeek, 17);
+      final hours = a.windowVolume((mon - 21).toDouble(), (mon + 6).toDouble(), VolumeMetric.time);
+      expect(hours.total, 4);
+      expect(a.windowVolume((mon + 100).toDouble(), (mon + 110).toDouble(), VolumeMetric.time).runs, 0);
+    });
+  });
+
   test('profile names are tidied and heights checked', () async {
     SharedPreferences.setMockInitialValues({});
     final a = await RunStore.load();

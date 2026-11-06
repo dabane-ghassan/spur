@@ -47,6 +47,8 @@ class OverviewScreen extends StatelessWidget {
           name: store.name,
           status: _trendPill(a, u),
         ),
+        const SizedBox(height: 12),
+        _WeekCard(analysis: a, units: u, metric: store.volume),
         const SectionTitle('Trends'),
         ValueListenableBuilder<(double, double)?>(
           valueListenable: store.view,
@@ -407,6 +409,186 @@ class _TimelineCard extends StatelessWidget {
   }
 }
 
+/// "3 h 12 min", for weekly time.
+String _hoursMinutes(int seconds) {
+  final m = (seconds / 60).round();
+  if (m < 60) return '$m min';
+  return '${m ~/ 60} h ${(m % 60).toString().padLeft(2, '0')} min';
+}
+
+/// The running week so far, Monday to today: distance, time and a bar per day.
+class _WeekCard extends StatelessWidget {
+  const _WeekCard({required this.analysis, required this.units, required this.metric});
+
+  final Analysis analysis;
+  final Units units;
+  final VolumeMetric metric;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final w = analysis.weekSoFar();
+    final isTime = metric == VolumeMetric.time;
+    final today = w.today - w.start;
+    final values = [for (var i = 0; i < 7; i++) isTime ? w.secondsByDay[i] / 3600 : w.kmByDay[i]];
+    final top = values.reduce(math.max);
+
+    // Compared with last week up to the same weekday, in the metric chosen for volume.
+    final dayName = weekdaysShort[today];
+    final now = isTime ? w.seconds.toDouble() : w.km;
+    final before = isTime ? w.lastWeekSecondsSoFar.toDouble() : w.lastWeekKmSoFar;
+    final whole = isTime ? _hoursMinutes(w.lastWeekSeconds) : '${units.distance(w.lastWeekKm)} ${units.name}';
+    final StatusPill pill;
+    if (before <= 0) {
+      pill = StatusPill(now > 0 ? 'More than last week by $dayName' : 'Nothing logged yet this week');
+    } else {
+      final pct = ((now / before - 1) * 100).round();
+      pill = pct.abs() < 5
+          ? StatusPill('Level with last week by $dayName')
+          : StatusPill('${pct > 0 ? '+' : ''}$pct% vs last week by $dayName',
+              icon: pct > 0 ? Icons.arrow_upward : Icons.arrow_downward, tone: pct > 0 ? Tone.good : Tone.neutral);
+    }
+
+    Widget big(String value, String unit, String label) => Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Flexible(child: Text(value, style: displayStyle(36, scheme.onSurface), maxLines: 1)),
+                  if (unit.isNotEmpty) ...[
+                    const SizedBox(width: 4),
+                    Text(unit, style: displayStyle(16, scheme.onSurfaceVariant, weight: FontWeight.w700)),
+                  ],
+                ],
+              ),
+              Text(label, style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+        );
+
+    final mins = (w.seconds / 60).round();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('THIS WEEK', style: labelStyle(context))),
+                Text('${fmtDayMonth(w.start)} – ${fmtDayMonth(w.start + 6)}',
+                    style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                big(units.distance(w.km), units.name, 'distance'),
+                big(mins < 60 ? '$mins' : '${mins ~/ 60}:${(mins % 60).toString().padLeft(2, '0')}',
+                    mins < 60 ? 'min' : 'h', 'time'),
+                big('${w.runs}', w.runs == 1 ? 'run' : 'runs', '${w.daysRun} of 7 days'),
+              ],
+            ),
+            const SizedBox(height: 14),
+            // One bar per day, Monday first, as tall as that day's distance (or time).
+            SizedBox(
+              height: 64,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  for (var i = 0; i < 7; i++)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: FractionallySizedBox(
+                                  heightFactor: top > 0 && values[i] > 0 ? math.max(0.12, values[i] / top) : 0.06,
+                                  widthFactor: 1,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: values[i] > 0
+                                          ? scheme.primary
+                                          : scheme.outlineVariant.withValues(alpha: i > today ? 0.45 : 1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 5),
+                            Text(
+                              weekdaysShort[i].substring(0, 1),
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: i == today ? FontWeight.w800 : FontWeight.w600,
+                                color: i == today ? scheme.onSurface : scheme.onSurfaceVariant,
+                                decoration: i == today ? TextDecoration.underline : null,
+                                decorationColor: scheme.primary,
+                                decorationThickness: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            pill,
+            const SizedBox(height: 6),
+            Text('Last week: $whole in total.', style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Volume over the part of the timeline on screen; follows zooming like the pace stats.
+class _VolumeInView extends StatelessWidget {
+  const _VolumeInView({required this.analysis, required this.units, required this.window, required this.metric});
+
+  final Analysis analysis;
+  final Units units;
+  final TrendWindow window;
+  final VolumeMetric metric;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final v = analysis.windowVolume(window.t0, window.t1, metric);
+    final isTime = metric == VolumeMetric.time;
+    String amount(double x) => isTime ? '${x.toStringAsFixed(x >= 100 ? 0 : 1)} h' : '${units.distance(x)} ${units.name}';
+    Widget item(String value, String label) => Text.rich(TextSpan(children: [
+          TextSpan(text: value, style: displayStyle(18, scheme.onSurface, weight: FontWeight.w700)),
+          TextSpan(text: ' $label', style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+        ]));
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+      child: v.runs == 0
+          ? Text('No runs in this part of the timeline', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13))
+          : Wrap(spacing: 14, runSpacing: 2, children: [
+              item(amount(v.total), 'total'),
+              item(amount(v.perWeek), 'a week'),
+              if (v.bestWeekStart != null) item(amount(v.bestWeek), 'best week (${fmtDayMonth(v.bestWeekStart!)})'),
+              item('${v.runs}', v.runs == 1 ? 'run' : 'runs'),
+            ]),
+    );
+  }
+}
+
 class _VolumeCard extends StatelessWidget {
   const _VolumeCard({
     required this.analysis,
@@ -501,6 +683,8 @@ class _VolumeCard extends StatelessWidget {
             const SizedBox(height: 8),
             Wrap(spacing: 6, runSpacing: 6, children: [StatusPill(change, icon: changeIcon), loadPill]),
             const SizedBox(height: 12),
+            _VolumeInView(analysis: analysis, units: units, window: window, metric: metric),
+            const SizedBox(height: 10),
             ZoomGestures(
               window: window,
               onView: onView,

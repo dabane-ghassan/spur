@@ -38,6 +38,8 @@ jobs:
             git status --porcelain --untracked-files=all > tool/flutter-create-files.txt
           fi
           flutter pub get
+          flutter analyze --no-fatal-infos
+          flutter test
           flutter test --update-goldens tool/screenshots
           shots=fastlane/metadata/android/en-US/images/phoneScreenshots
           rm -f "$shots"/*.png
