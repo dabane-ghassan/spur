@@ -380,10 +380,30 @@ function paceChart() {
 }
 
 /* ---------- volume chart ---------- */
+// Volume over the part of the timeline on screen; changes as you zoom, like the pace stats.
+function volInView(t0, t1) {
+  const time = volIsTime(), weeks = new Map();
+  let total = 0, n = 0;
+  for (const r of state.runs) {
+    const d = dn(r.date);
+    if (d < t0 || d > t1) continue;
+    const v = time ? r.sec / 3600 : r.km;
+    total += v; n++;
+    const w = weekStart(d); weeks.set(w, (weeks.get(w) || 0) + v);
+  }
+  let best = null;
+  for (const [w, v] of weeks) if (!best || v > best.v) best = { w, v };
+  const amount = (v) => time ? `<b>${v.toFixed(v >= 100 ? 0 : 1)}</b> h` : `<b>${fmtDist(v)}</b> ${uName()}`;
+  const perWeek = total / Math.max(1, (t1 - t0 + 1) / 7);
+  $('#volInView').innerHTML = n
+    ? `<span>${amount(total)} total</span><span>${amount(perWeek)} a week</span>${best ? `<span>${amount(best.v)} best week (${esc(fd(best.w, { day: 'numeric', month: 'short' }))})</span>` : ''}<span><b>${n}</b> ${n === 1 ? 'run' : 'runs'}</span>`
+    : '<span>No runs in this part of the timeline</span>';
+}
 function volumeChart() {
   const el = $('#volChart'), ser = series(), cur = weekStart(today());
   if (ser.empty) return;
   const { t0, t1 } = chartRange(), span = Math.max(1, t1 - t0);
+  volInView(t0, t1);
   const W = Math.max(280, el.clientWidth || 320), H = W >= 640 ? Math.round(Math.min(300, Math.max(220, W * 0.32))) : 190;
   const P = { l: 42, r: 14, t: 16, b: 26 }, iw = W - P.l - P.r, ih = H - P.t - P.b;
   const dayAt = (t) => { const i = t - ser.D0; return i >= 0 && i < ser.daily.length ? ser.daily[i] : 0; };
